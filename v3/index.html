@@ -1,0 +1,2596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub PR Metrics Dashboard (Arquivo Único)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.x/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns/locale/pt-BR@3.x/cdn.min.js"></script>
+
+    <style>
+      /* Conteúdo de style.css embutido */
+      :root {
+        /* Light Theme Variables (Default) */
+        --bg-primary: #ffffff;
+        --bg-secondary: #f6f8fa;
+        --bg-header: #2c2c2c; /* Darker header even in light mode, VSCode-like */
+        --text-primary: #24292e;
+        --text-secondary: #586069; /* Subdued text (footer, placeholders) */
+        --text-header: #cccccc; /* Lighter text for dark header */
+        --text-link: #007acc; /* VSCode blue */
+        --border-color: #e1e4e8; /* Borders */
+        --accent-color: #007acc;
+        --accent-color-hover: #005a9e;
+        --button-secondary-bg: #e1e4e8;
+        --button-secondary-hover-bg: #d1d5da;
+        --button-secondary-border: #c6cbd1; /* Use a defined border color */
+        --input-bg: #ffffff;
+        --input-border: #d1d5da;
+        --error-bg: #ffeef0;
+        --error-text: #d73a49;
+        --error-border: #d73a49;
+        --warning-text: #b08800; /* Warning text color */
+        --success-color: #28a745;
+        --chart-grid-color: rgba(0, 0, 0, 0.1);
+        --chart-tick-color: #586069;
+        --chart-label-color: #24292e;
+        --chart-tooltip-bg: rgba(10, 10, 10, 0.8); /* Darker tooltip */
+        --chart-tooltip-text: #ffffff;
+        --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+          "Helvetica Neue", sans-serif; /* Common UI font stack */
+        --border-radius: 4px; /* Slightly less rounded */
+        --table-header-bg: #f6f8fa;
+        --table-row-even-bg: #f6f8fa;
+        --table-row-hover-bg: #f1f8ff;
+        --toggle-bg: #f6f8fa;
+        /* Toggle Button Colors */
+        --toggle-button-active-bg: var(--accent-color);
+        --toggle-button-active-text: #ffffff;
+        --toggle-button-active-border: var(--accent-color);
+        --toggle-button-inactive-bg: var(--button-secondary-bg);
+        --toggle-button-inactive-text: var(--text-primary);
+        --toggle-button-inactive-border: var(--border-color);
+        --toggle-button-hover-bg: var(
+          --button-secondary-hover-bg
+        ); /* Use secondary hover for inactive */
+        --toggle-button-active-hover-bg: var(--accent-color-hover);
+      }
+
+      body.dark-mode {
+        /* Dark Theme Variables (VSCode Inspired) */
+        --bg-primary: #1e1e1e; /* Editor background */
+        --bg-secondary: #252526; /* Sidebar/Activity bar background */
+        --bg-header: #3c3c3c; /* Title bar */
+        --text-primary: #cccccc; /* Default text */
+        --text-secondary: #9c9c9c; /* Dimmer text */
+        --text-header: #cccccc; /* Header text */
+        --text-link: #4fc1ff; /* Brighter blue links */
+        --border-color: #444444; /* Borders */
+        --accent-color: #007acc; /* Keep VSCode blue accent */
+        --accent-color-hover: #4fc1ff; /* Lighter blue hover */
+        --button-secondary-bg: #3a3d41;
+        --button-secondary-hover-bg: #4a4d51;
+        --button-secondary-border: #5a5d61;
+        --input-bg: #3c3c3c; /* Input background */
+        --input-border: #5a5d61; /* Input border */
+        --error-bg: rgba(230, 70, 70, 0.15);
+        --error-text: #f48771;
+        --error-border: rgba(230, 70, 70, 0.5);
+        --warning-text: #d29922; /* Dark mode warning text */
+        --success-color: #3fb950;
+        --chart-grid-color: rgba(204, 204, 204, 0.15);
+        --chart-tick-color: #9c9c9c;
+        --chart-label-color: #cccccc;
+        --chart-tooltip-bg: rgba(
+          200,
+          200,
+          200,
+          0.9
+        ); /* Lighter tooltip for dark mode */
+        --chart-tooltip-text: #1e1e1e;
+        --table-header-bg: #2a2d2e;
+        --table-row-even-bg: #2a2d2e;
+        --table-row-hover-bg: #3a3d41;
+        --toggle-bg: #252526;
+        /* Toggle Button Dark Colors */
+        --toggle-button-active-bg: var(--accent-color);
+        --toggle-button-active-text: #ffffff; /* White text on blue */
+        --toggle-button-active-border: var(--accent-color);
+        --toggle-button-inactive-bg: var(--button-secondary-bg);
+        --toggle-button-inactive-text: var(--text-primary);
+        --toggle-button-inactive-border: var(--border-color);
+        --toggle-button-hover-bg: var(--button-secondary-hover-bg);
+        --toggle-button-active-hover-bg: var(--accent-color-hover);
+      }
+
+      /* Apply base styles using variables */
+      body {
+        font-family: var(--font-family);
+        margin: 0;
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+        line-height: 1.6;
+        transition: background-color 0.2s ease, color 0.2s ease; /* Faster transition */
+      }
+
+      header {
+        background-color: var(--bg-header);
+        color: var(--text-header);
+        padding: 0.8rem 2rem; /* Slightly reduced padding */
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); /* Adjusted shadow */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        border-bottom: 1px solid var(--border-color); /* Add border like VSCode */
+      }
+      header h1 {
+        margin: 0;
+        flex-grow: 1;
+        text-align: center;
+        font-size: 1.2em; /* Slightly smaller title */
+        font-weight: 500;
+      }
+
+      /* Theme Toggle Button Styles */
+      .theme-toggle {
+        position: absolute;
+        right: 1.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: 1px solid transparent; /* No border by default */
+        color: var(--text-header);
+        padding: 0.3rem; /* Adjust padding */
+        border-radius: var(--border-radius); /* Match general border-radius */
+        cursor: pointer;
+        font-size: 1.3rem; /* Larger icon */
+        line-height: 1;
+        transition: color 0.2s ease, background-color 0.2s ease;
+      }
+      .theme-toggle:hover {
+        background-color: rgba(255, 255, 255, 0.1); /* Consistent hover */
+      }
+      body.dark-mode .theme-toggle {
+        color: var(--text-primary);
+      }
+      body.dark-mode .theme-toggle:hover {
+        background-color: rgba(204, 204, 204, 0.1);
+      }
+
+      main {
+        padding: 1.5rem;
+        max-width: 1600px;
+        margin: 1rem auto;
+      }
+
+      .card {
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: none; /* Remove card shadow for flatter look */
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+      }
+
+      /* --- Config Section --- */
+      .config-container h2,
+      .filters-container h2,
+      .summary-container h2,
+      .charts-container h2,
+      .details-container h2 {
+        margin-top: 0;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem; /* Increased margin */
+        font-weight: 600;
+        font-size: 1.1em; /* Slightly larger section titles */
+        color: var(--text-primary);
+      }
+
+      .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem 1.5rem;
+      }
+
+      .config-group label,
+      .filter-group label {
+        font-weight: 500;
+        margin-bottom: 0.4rem; /* Increased spacing */
+        font-size: 0.85em; /* Smaller label */
+        color: var(--text-secondary); /* Dimmer label text */
+        text-transform: uppercase; /* Uppercase labels */
+        display: block; /* Ensure label takes full width */
+      }
+
+      .config-group input[type="text"],
+      .config-group input[type="password"],
+      .filter-group input[type="text"],
+      .filter-group input[type="date"],
+      .filter-group select {
+        padding: 0.5rem 0.7rem; /* Adjusted padding */
+        border: 1px solid var(--input-border);
+        background-color: var(--input-bg);
+        color: var(--text-primary);
+        border-radius: var(--border-radius);
+        font-size: 0.95em;
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+        outline: none; /* Remove default outline */
+        transition: border-color 0.2s ease;
+      }
+      .config-group input:focus,
+      .filter-group input:focus,
+      .filter-group select:focus {
+        border-color: var(--accent-color); /* Highlight border on focus */
+      }
+
+      .config-group input::placeholder,
+      .filter-group input::placeholder {
+        color: var(--text-secondary);
+        opacity: 0.7;
+      }
+
+      .config-group .warning,
+      .filter-group .warning {
+        color: var(--warning-text);
+        font-size: 0.8em;
+        font-weight: normal;
+        display: inline; /* Allow warning next to label */
+        margin-left: 5px;
+      }
+      .config-group small.warning {
+        display: block; /* Make small warning take its own line */
+        margin-top: 4px;
+      }
+
+      /* --- Filters --- */
+      #filters-form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem 1.5rem;
+        align-items: end;
+      }
+
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .date-inputs {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .date-inputs span {
+        margin: 0 0.2rem;
+        flex-shrink: 0;
+        font-size: 0.9em;
+        color: var(--text-secondary);
+      }
+      .date-inputs input[type="date"] {
+        flex-grow: 1;
+        flex-shrink: 1;
+        min-width: 100px;
+      }
+
+      .filter-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem; /* Increased margin */
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .filter-actions button,
+      .button-link {
+        padding: 0.6rem 1.1rem; /* Adjusted padding */
+        border: 1px solid var(--button-secondary-border); /* Use secondary border */
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.9em; /* Slightly smaller button text */
+        transition: background-color 0.2s ease, border-color 0.2s ease,
+          color 0.2s ease, box-shadow 0.2s ease;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+        color: var(--text-primary);
+        background-color: var(--button-secondary-bg);
+        box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.1); /* Subtle shadow */
+      }
+
+      .filter-actions button[type="submit"] {
+        background-color: var(--accent-color);
+        color: #ffffff; /* White text on accent */
+        border-color: var(--accent-color);
+        box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+      }
+      body.dark-mode .filter-actions button[type="submit"] {
+        color: #ffffff; /* Ensure white text in dark mode */
+      }
+
+      .filter-actions button:hover,
+      .button-link:hover {
+        background-color: var(--button-secondary-hover-bg);
+        border-color: var(--button-secondary-border);
+        color: var(--text-primary);
+      }
+      .filter-actions button[type="submit"]:hover {
+        background-color: var(--accent-color-hover);
+        border-color: var(--accent-color-hover);
+        color: #ffffff; /* Keep text white on hover */
+      }
+      body.dark-mode .filter-actions button[type="submit"]:hover {
+        color: #ffffff;
+      }
+
+      /* --- Summary --- */
+      .summary-container {
+        text-align: center;
+      }
+      #summary-details {
+        display: flex;
+        justify-content: space-around;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      #summary-details p {
+        margin: 0;
+        font-size: 1.1em;
+        color: var(--text-primary);
+      }
+      #summary-details span {
+        font-weight: 600;
+        color: var(--accent-color);
+      } /* Highlight numbers */
+
+      /* --- Charts --- */
+      .charts-container .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: 1.5rem;
+      }
+      .chart-card {
+        padding: 1rem;
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+      } /* Apply card styles */
+      .chart-card h3 {
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+        font-size: 1em;
+        text-align: center;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+      }
+      .chart-card canvas {
+        max-width: 100%;
+        height: auto;
+        max-height: 280px; /* Slightly smaller max height */
+      }
+      .average-value {
+        text-align: center;
+        font-size: 1.4em;
+        font-weight: 600;
+        color: var(--accent-color);
+        margin-bottom: 1rem;
+      }
+
+      /* --- Details Section Styles --- */
+      #details-section-container {
+        margin-top: 1.5rem;
+      }
+      /* Ensure the dynamically added container gets card styles */
+      #details-section-container > .details-container.card {
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem; /* Already has margin-top from section */
+        box-shadow: none;
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+      }
+
+      /* Column Toggles */
+      .column-toggles {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background-color: var(--toggle-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+      }
+      .column-toggles h3 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: 0.9em;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+      }
+      .toggle-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      /* Toggle Button Styles */
+      .toggle-button {
+        padding: 0.4rem 0.8rem;
+        border: 1px solid;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-size: 0.85em;
+        transition: background-color 0.2s ease, color 0.2s ease,
+          border-color 0.2s ease;
+        user-select: none;
+        background-color: var(--toggle-button-inactive-bg);
+        color: var(--toggle-button-inactive-text);
+        border-color: var(--toggle-button-inactive-border);
+      }
+      .toggle-button.active {
+        background-color: var(--toggle-button-active-bg);
+        color: var(--toggle-button-active-text);
+        border-color: var(--toggle-button-active-border);
+        font-weight: 500;
+      }
+      .toggle-button:hover {
+        background-color: var(--toggle-button-hover-bg);
+      }
+      .toggle-button.active:hover {
+        background-color: var(--toggle-button-active-hover-bg);
+        border-color: var(--toggle-button-active-hover-bg);
+      }
+
+      /* Table Styles */
+      .table-wrapper {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 70vh;
+        margin-top: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+      }
+      #pr-details-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9em;
+      }
+      #pr-details-table th,
+      #pr-details-table td {
+        border: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.7rem 0.9rem;
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+        transition: display 0.3s ease;
+        background-color: var(--bg-primary);
+      }
+      #pr-details-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      #pr-details-table th[data-column-index="1"],
+      #pr-details-table td[data-column-index="1"] {
+        white-space: normal;
+        min-width: 200px;
+      }
+
+      /* Sticky Header Row Styles */
+      #pr-details-table thead th {
+        background-color: var(--table-header-bg);
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        border-bottom: 2px solid var(--border-color);
+      }
+
+      /* Apply even row background */
+      #pr-details-table tbody tr:nth-child(even) td {
+        background-color: var(--table-row-even-bg);
+      }
+
+      /* Apply hover effect */
+      #pr-details-table tbody tr:hover td {
+        background-color: var(--table-row-hover-bg);
+      }
+
+      #pr-details-table td a {
+        color: var(--text-link);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      #pr-details-table td a:hover {
+        text-decoration: underline;
+      }
+
+      /* Class to hide columns */
+      .column-hidden {
+        display: none;
+      }
+
+      /* --- Common Styles --- */
+      .loading {
+        text-align: center;
+        padding: 1rem;
+        font-style: italic;
+        color: var(--text-secondary);
+      }
+      .error {
+        text-align: center;
+        padding: 1rem;
+        background-color: var(--error-bg);
+        color: var(--error-text);
+        border: 1px solid var(--error-border);
+        border-radius: var(--border-radius);
+        margin-top: 1rem;
+      }
+      footer {
+        text-align: center;
+        margin-top: 2rem;
+        padding: 1rem;
+        font-size: 0.9em;
+        color: var(--text-secondary);
+        border-top: 1px solid var(--border-color);
+      }
+
+      /* --- Responsive adjustments --- */
+      @media (max-width: 768px) {
+        header {
+          padding: 0.8rem 1rem;
+        }
+        header h1 {
+          font-size: 1.1em;
+        }
+        .theme-toggle {
+          right: 1rem;
+          font-size: 1.1rem;
+        }
+        main {
+          padding: 1rem;
+        }
+        .card {
+          padding: 1rem;
+        }
+        .config-grid,
+        #filters-form {
+          grid-template-columns: 1fr; /* Stack config and filters on mobile */
+        }
+        .charts-container .chart-grid {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+        }
+        .filter-actions {
+          justify-content: center;
+        }
+        .toggle-grid {
+          /* Flex wrap handles this */
+        }
+        #pr-details-table th,
+        #pr-details-table td {
+          padding: 0.6rem;
+          font-size: 0.85em; /* Slightly smaller font on mobile */
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Dashboard de Métricas de Pull Requests (Arquivo Único)</h1>
+      <button id="theme-toggle-btn" class="theme-toggle" title="Alternar Tema">
+        🌙
+      </button>
+    </header>
+
+    <main>
+      <section class="config-container card">
+        <h2>Configuração GitHub Enterprise</h2>
+        <div class="config-grid">
+          <div class="config-group">
+            <label for="ghe-hostname">Hostname GHE:</label>
+            <input
+              type="text"
+              id="ghe-hostname"
+              placeholder="github.suaempresa.com"
+              required
+            />
+          </div>
+          <div class="config-group">
+            <label for="repo-owner">Dono (Org/User):</label>
+            <input
+              type="text"
+              id="repo-owner"
+              placeholder="owner-name"
+              required
+            />
+          </div>
+          <div class="config-group">
+            <label for="repo-name">Nome do Repositório:</label>
+            <input
+              type="text"
+              id="repo-name"
+              placeholder="repo-name"
+              required
+            />
+          </div>
+          <div class="config-group">
+            <label for="github-token"
+              >GitHub Token (PAT):
+              <strong class="warning"
+                >(Não será salvo, apenas usado na memória)</strong
+              ></label
+            >
+            <input
+              type="password"
+              id="github-token"
+              placeholder="Seu Personal Access Token"
+              required
+            />
+            <small class="warning"
+              >Este token precisa de permissão 'repo' para ler PRs.</small
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="filters-container card">
+        <h2>Filtros</h2>
+        <form id="filters-form">
+          <div class="filter-group">
+            <label for="date-range">Intervalo de Datas (Criação):</label>
+            <div class="date-inputs">
+              <input type="date" id="start-date" name="startDate" />
+              <span>até</span>
+              <input type="date" id="end-date" name="endDate" />
+            </div>
+          </div>
+          <div class="filter-group">
+            <label for="author">Autor:</label>
+            <input
+              type="text"
+              id="author"
+              name="author"
+              list="author-list"
+              placeholder="Login do autor"
+            />
+            <datalist id="author-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="approver">Aprovador:</label>
+            <input
+              type="text"
+              id="approver"
+              name="approver"
+              list="approver-list"
+              placeholder="Login do aprovador"
+            />
+            <datalist id="approver-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="target-branch">Branch Destino:</label>
+            <input
+              type="text"
+              id="target-branch"
+              name="targetBranch"
+              list="branch-list"
+              placeholder="Nome da branch"
+            />
+            <datalist id="branch-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="status">Status:</label>
+            <select id="status" name="status">
+              <option value="">Todos</option>
+              <option value="OPEN">Aberto (Open)</option>
+              <option value="MERGED">Mergeado (Merged)</option>
+              <option value="CLOSED">Fechado (Closed)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="exclude-author">Excluir Autor:</label>
+            <input
+              type="text"
+              id="exclude-author"
+              name="excludeAuthor"
+              list="author-list"
+              placeholder="Login do autor a excluir"
+            />
+          </div>
+          <div class="filter-group">
+            <label for="exclude-branch">Excluir Branch (Padrão):</label>
+            <input
+              type="text"
+              id="exclude-branch"
+              name="excludeBranchPattern"
+              placeholder="Ex: releases/**"
+            />
+          </div>
+
+          <div class="filter-actions">
+            <button type="submit">Atualizar Métricas</button>
+            <button type="button" id="clear-filters">Limpar Filtros</button>
+            <button type="button" id="clear-cache">Limpar Cache Local</button>
+            <button type="button" id="toggle-details-btn" class="button-link">
+              Mostrar Detalhes por PR
+            </button>
+          </div>
+        </form>
+        <div id="loading-indicator" class="loading" style="display: none">
+          Carregando dados...
+        </div>
+        <div id="error-message" class="error" style="display: none"></div>
+      </section>
+
+      <section class="summary-container card">
+        <h2>Resumo <span id="summary-count">(...)</span></h2>
+        <div id="summary-details">
+          <p>Abertos: <span id="summary-open">?</span></p>
+          <p>Mergeados: <span id="summary-merged">?</span></p>
+          <p>Fechados (não mergeados): <span id="summary-closed">?</span></p>
+        </div>
+      </section>
+
+      <section class="charts-container">
+        <h2>Métricas Agregadas</h2>
+        <div class="chart-grid">
+          <div class="chart-card card">
+            <h3>Tempo Médio para Primeira Revisão (Horas)</h3>
+            <p class="average-value" id="avg-time-to-first-review">--</p>
+            <canvas id="time-to-first-review-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio em Draft (Horas)</h3>
+            <p class="average-value" id="avg-time-in-draft">--</p>
+            <canvas id="time-in-draft-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Contribuição por Aprovador (Nº de PRs Aprovados)</h3>
+            <canvas id="reviewer-contribution-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio de Ciclo do PR (Criação -> Merge) (Horas)</h3>
+            <p class="average-value" id="avg-pr-cycle-time">--</p>
+            <canvas id="pr-cycle-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>
+              Tempo Médio de Revisão (1ª Revisão -> Aprovação/Merge) (Horas)
+            </h3>
+            <p class="average-value" id="avg-review-time">--</p>
+            <canvas id="review-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio de Merge (Aprovação -> Merge) (Horas)</h3>
+            <p class="average-value" id="avg-merge-time">--</p>
+            <canvas id="merge-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tamanho Médio do PR (Linhas Alteradas)</h3>
+            <p class="average-value" id="avg-pr-size">--</p>
+            <canvas id="pr-size-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Média de Comentários por PR</h3>
+            <p class="average-value" id="avg-review-depth">--</p>
+            <canvas id="review-depth-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="details-section-container" style="display: none"></section>
+    </main>
+
+    <footer>
+      <p>GitHub PR Metrics Dashboard (Arquivo Único)</p>
+    </footer>
+
+    <script>
+      // Conteúdo de script.js embutido
+
+      // --- DOM Elements ---
+      const bodyElement = document.body;
+      const themeToggleButton = document.getElementById("theme-toggle-btn");
+      // Config Inputs
+      const gheHostnameInput = document.getElementById("ghe-hostname");
+      const repoOwnerInput = document.getElementById("repo-owner");
+      const repoNameInput = document.getElementById("repo-name");
+      const githubTokenInput = document.getElementById("github-token");
+      // Filter Inputs & Form
+      const filtersForm = document.getElementById("filters-form");
+      const startDateInput = document.getElementById("start-date");
+      const endDateInput = document.getElementById("end-date");
+      const authorInput = document.getElementById("author");
+      const approverInput = document.getElementById("approver");
+      const targetBranchInput = document.getElementById("target-branch");
+      const statusInput = document.getElementById("status");
+      const excludeAuthorInput = document.getElementById("exclude-author");
+      const excludeBranchInput = document.getElementById("exclude-branch");
+      const clearFiltersButton = document.getElementById("clear-filters");
+      const clearCacheButton = document.getElementById("clear-cache"); // New button
+      const toggleDetailsButton = document.getElementById("toggle-details-btn");
+      // UI Elements
+      const loadingIndicator = document.getElementById("loading-indicator");
+      const errorMessageDiv = document.getElementById("error-message");
+      const summaryCountSpan = document.getElementById("summary-count");
+      const summaryOpenSpan = document.getElementById("summary-open");
+      const summaryMergedSpan = document.getElementById("summary-merged");
+      const summaryClosedSpan = document.getElementById("summary-closed");
+      // Average Value Displays
+      const avgTimeToFirstReview = document.getElementById(
+        "avg-time-to-first-review"
+      );
+      const avgTimeInDraft = document.getElementById("avg-time-in-draft");
+      const avgPrCycleTime = document.getElementById("avg-pr-cycle-time");
+      const avgReviewTime = document.getElementById("avg-review-time");
+      const avgMergeTime = document.getElementById("avg-merge-time");
+      const avgPrSize = document.getElementById("avg-pr-size");
+      const avgReviewDepth = document.getElementById("avg-review-depth");
+      // Datalists
+      const authorDatalist = document.getElementById("author-list");
+      const approverDatalist = document.getElementById("approver-list");
+      const branchDatalist = document.getElementById("branch-list");
+      // Details Section
+      const detailsSectionContainer = document.getElementById(
+        "details-section-container"
+      );
+
+      // --- Details Table Elements (initialized in ensureDetailsStructure) ---
+      let detailsTable = null;
+      let detailsTableHead = null;
+      let detailsTableBody = null;
+      let detailsLoadingIndicator = null;
+      let detailsErrorMessageDiv = null;
+      let columnTogglesContainer = null;
+
+      // --- Constants ---
+      const LOCAL_STORAGE_KEY_THEME = "dashboardThemePreference";
+      const LOCAL_STORAGE_KEY_COLUMNS = "prDetailsColumnVisibility";
+      const LOCAL_STORAGE_KEY_CACHE_PREFIX = "prDataCache_"; // Prefix for cache keys
+      const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes for client-side cache
+      const PR_PAGE_SIZE = 50; // Number of PRs to fetch per API request
+      const TOGGLEABLE_COLUMNS = [
+        // Define which columns are toggleable
+        { index: 2, label: "Autor", defaultVisible: true },
+        { index: 3, label: "Status", defaultVisible: true },
+        { index: 4, label: "Criado em", defaultVisible: true },
+        { index: 5, label: "Branch Destino", defaultVisible: true },
+        { index: 6, label: "Aprovador(es)", defaultVisible: true },
+        { index: 7, label: "Tempo em Draft (h)", defaultVisible: true },
+        { index: 8, label: "Tempo 1ª Revisão (h)", defaultVisible: true },
+        { index: 9, label: "Tempo Revisão (h)", defaultVisible: true },
+        { index: 10, label: "Tempo Merge (h)", defaultVisible: true },
+        { index: 11, label: "Tempo Ciclo (h)", defaultVisible: true },
+        { index: 12, label: "Tam. (Linhas)", defaultVisible: true },
+        { index: 13, label: "Comentários", defaultVisible: true },
+        { index: 14, label: "Mergeado em", defaultVisible: true },
+      ];
+
+      // --- GraphQL Query (Copied from backend/githubClient.js) ---
+      const PULL_REQUEST_QUERY = `
+        query GetPullRequests($owner: String!, $name: String!, $first: Int!, $after: String, $states: [PullRequestState!]) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(first: $first, after: $after, states: $states, orderBy: {field: CREATED_AT, direction: DESC}) {
+              pageInfo {
+                endCursor
+                hasNextPage
+              }
+              nodes {
+                id
+                number
+                title
+                state # OPEN, CLOSED, MERGED
+                url
+                createdAt
+                closedAt
+                mergedAt
+                isDraft
+                author {
+                  login
+                }
+                baseRefName # Target branch
+                headRefName # Source branch
+                reviews(first: 50) {
+                  nodes {
+                    author { login }
+                    createdAt
+                    state # APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
+                    comments { totalCount }
+                  }
+                }
+                reviewRequests(first: 10) {
+                  nodes {
+                    requestedReviewer {
+                      ... on User { login }
+                    }
+                  }
+                }
+                comments(first: 1) { totalCount }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      committedDate
+                      authoredDate
+                    }
+                  }
+                }
+                timelineItems(last: 50, itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, PULL_REQUEST_REVIEW]) {
+                  nodes {
+                    __typename
+                    ... on ReadyForReviewEvent { createdAt }
+                    ... on ConvertToDraftEvent { createdAt }
+                    ... on PullRequestReview { author { login } createdAt state }
+                  }
+                }
+                additions
+                deletions
+                changedFiles
+              }
+            }
+          }
+        }
+      `;
+
+      // --- Chart Instances ---
+      const chartInstances = {};
+
+      // --- State ---
+      let isDetailsVisible = false;
+      let currentRawPrData = null; // Store raw PR data fetched from API or cache
+      let currentFilteredPrData = null; // Store PR data after applying filters
+      let currentMetricsData = null; // Store calculated metrics
+      let currentTheme = "light";
+
+      // --- Client-Side Cache Functions ---
+      function getCacheKey(owner, repo, states) {
+        return `${LOCAL_STORAGE_KEY_CACHE_PREFIX}${owner}_${repo}_${states.join(
+          "_"
+        )}_v3`; // Versioning cache key
+      }
+
+      function getCache(key) {
+        try {
+          const cachedItem = localStorage.getItem(key);
+          if (!cachedItem) return null;
+
+          const { value, expires } = JSON.parse(cachedItem);
+
+          if (Date.now() > expires) {
+            console.log(`[Cache] Expired key: ${key}`);
+            localStorage.removeItem(key); // Clean up expired entry
+            return null;
+          }
+
+          console.log(`[Cache] Hit for key: ${key}`);
+          return value;
+        } catch (error) {
+          console.error(`[Cache] Error getting cache for key ${key}:`, error);
+          localStorage.removeItem(key); // Remove corrupted item
+          return null;
+        }
+      }
+
+      function setCache(key, value, ttl = CACHE_TTL_MS) {
+        try {
+          const expires = Date.now() + ttl;
+          const itemToCache = JSON.stringify({ value, expires });
+          localStorage.setItem(key, itemToCache);
+          console.log(`[Cache] Setting key: ${key}, TTL: ${ttl / 1000}s`);
+        } catch (error) {
+          console.error(`[Cache] Error setting cache for key ${key}:`, error);
+          // Handle potential storage limit errors
+          if (
+            error.name === "QuotaExceededError" ||
+            error.name === "NS_ERROR_DOM_QUOTA_REACHED"
+          ) {
+            console.warn(
+              "[Cache] LocalStorage quota exceeded. Clearing old cache."
+            );
+            clearAllPrCache(); // Attempt to clear old cache items
+            try {
+              // Retry setting after clearing
+              localStorage.setItem(key, JSON.stringify({ value, expires }));
+            } catch (retryError) {
+              console.error(
+                "[Cache] Failed to set cache even after clearing:",
+                retryError
+              );
+            }
+          }
+        }
+      }
+
+      function clearCacheByKey(key) {
+        console.log(`[Cache] Clearing cache for key: ${key}`);
+        localStorage.removeItem(key);
+      }
+
+      function clearAllPrCache() {
+        console.log("[Cache] Clearing all PR data cache from localStorage...");
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith(LOCAL_STORAGE_KEY_CACHE_PREFIX)) {
+            localStorage.removeItem(key);
+            console.log(`[Cache] Removed item: ${key}`);
+          }
+        });
+      }
+
+      // --- Utility Functions (Mostly unchanged) ---
+      function destroyChart(chartId) {
+        if (chartInstances[chartId]) {
+          chartInstances[chartId].destroy();
+          delete chartInstances[chartId];
+        }
+      }
+      function calculateAverage(arr, precision = 1) {
+        if (!arr || arr.length === 0) return "--";
+        const num = arr.filter((v) => typeof v === "number" && !isNaN(v));
+        if (num.length === 0) return "--";
+        const sum = num.reduce((a, v) => a + v, 0);
+        return (sum / num.length).toFixed(precision);
+      }
+      function formatDate(dateInput) {
+        if (!dateInput) return "--";
+        try {
+          const d = new Date(dateInput);
+          if (isNaN(d.getTime())) return "--";
+          // Use date-fns if available and locale is loaded
+          if (
+            typeof dateFns !== "undefined" &&
+            dateFns.format &&
+            dateFns.locale?.ptBR
+          ) {
+            return dateFns.format(d, "P p", { locale: dateFns.locale.ptBR });
+          } else {
+            // Fallback to browser's default locale formatting
+            return d.toLocaleString("pt-BR");
+          }
+        } catch (e) {
+          console.error("Error formatting date:", e, dateInput);
+          return "--";
+        }
+      }
+      function formatHours(hours, precision = 1) {
+        if (typeof hours !== "number" || isNaN(hours) || hours === null) {
+          return "--";
+        }
+        return hours.toFixed(precision);
+      }
+      function showError(message) {
+        errorMessageDiv.textContent = message;
+        errorMessageDiv.style.display = "block";
+        console.error("Dashboard Error:", message);
+      }
+      function hideError() {
+        errorMessageDiv.style.display = "none";
+        errorMessageDiv.textContent = "";
+      }
+      function showLoading(message = "Carregando dados...") {
+        loadingIndicator.textContent = message;
+        loadingIndicator.style.display = "block";
+        hideError();
+      }
+      function hideLoading() {
+        loadingIndicator.style.display = "none";
+      }
+      function showDetailsError(message) {
+        if (detailsErrorMessageDiv) {
+          detailsErrorMessageDiv.textContent = message;
+          detailsErrorMessageDiv.style.display = "block";
+        }
+        console.error("Details Error:", message);
+      }
+      function hideDetailsError() {
+        if (detailsErrorMessageDiv) {
+          detailsErrorMessageDiv.style.display = "none";
+          detailsErrorMessageDiv.textContent = "";
+        }
+      }
+      function showDetailsLoading() {
+        if (detailsLoadingIndicator) {
+          detailsLoadingIndicator.style.display = "block";
+        }
+        hideDetailsError();
+        if (detailsTableBody) detailsTableBody.innerHTML = "";
+      }
+      function hideDetailsLoading() {
+        if (detailsLoadingIndicator) {
+          detailsLoadingIndicator.style.display = "none";
+        }
+      }
+
+      // --- Theme Toggle Functions (Unchanged) ---
+      function applyTheme(theme) {
+        bodyElement.classList.toggle("dark-mode", theme === "dark");
+        themeToggleButton.textContent = theme === "dark" ? "☀️" : "🌙";
+        currentTheme = theme;
+        updateChartDefaults(theme);
+      }
+      function loadThemePreference() {
+        const pref = localStorage.getItem(LOCAL_STORAGE_KEY_THEME);
+        applyTheme(pref || "light");
+      }
+      function saveThemePreference(theme) {
+        localStorage.setItem(LOCAL_STORAGE_KEY_THEME, theme);
+      }
+      function toggleTheme() {
+        const newTheme = currentTheme === "light" ? "dark" : "light";
+        applyTheme(newTheme);
+        saveThemePreference(newTheme);
+        // Re-render charts with new theme defaults if data exists
+        if (currentFilteredPrData && currentMetricsData) {
+          updateDashboardAndCharts(currentFilteredPrData, currentMetricsData);
+        }
+      }
+      function updateChartDefaults(theme) {
+        const isDark = theme === "dark";
+        const gridColor = isDark
+          ? "rgba(240, 246, 252, 0.1)"
+          : "rgba(0, 0, 0, 0.1)";
+        const tickColor = isDark ? "#8b949e" : "#586069";
+        const labelColor = isDark ? "#c9d1d9" : "#24292e";
+        const tooltipBg = isDark
+          ? "rgba(200, 200, 200, 0.9)"
+          : "rgba(10, 10, 10, 0.8)";
+        const tooltipColor = isDark ? "#1e1e1e" : "#ffffff";
+
+        // Check if Chart is loaded before accessing defaults
+        if (typeof Chart !== "undefined") {
+          Chart.defaults.color = labelColor;
+          Chart.defaults.borderColor = gridColor;
+          if (Chart.defaults.scale) {
+            Chart.defaults.scale.grid.color = gridColor;
+            Chart.defaults.scale.ticks.color = tickColor;
+          }
+          if (Chart.defaults.plugins?.tooltip) {
+            Chart.defaults.plugins.tooltip.backgroundColor = tooltipBg;
+            Chart.defaults.plugins.tooltip.titleColor = tooltipColor;
+            Chart.defaults.plugins.tooltip.bodyColor = tooltipColor;
+          }
+        } else {
+          console.warn("Chart.js not loaded yet, cannot set defaults.");
+        }
+      }
+
+      // --- Chart Rendering (Unchanged) ---
+      function renderBarChart(
+        chartId,
+        labels,
+        data,
+        label,
+        xAxisLabel = "",
+        yAxisLabel = ""
+      ) {
+        destroyChart(chartId);
+        const ctx = document.getElementById(chartId)?.getContext("2d");
+        if (!ctx) return;
+        const isDark = bodyElement.classList.contains("dark-mode");
+        const accentColor = getComputedStyle(bodyElement)
+          .getPropertyValue("--accent-color")
+          .trim();
+        const accentColorBg = isDark
+          ? "rgba(88, 166, 255, 0.6)"
+          : "rgba(0, 122, 204, 0.6)";
+        chartInstances[chartId] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: label,
+                data: data,
+                backgroundColor: accentColorBg,
+                borderColor: accentColor,
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: data.length > 1 && data.length < 20 },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: !!yAxisLabel, text: yAxisLabel },
+              },
+              x: {
+                title: { display: !!xAxisLabel, text: xAxisLabel },
+                ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 },
+              },
+            },
+          },
+        });
+      }
+      function renderHistogramChart(
+        chartId,
+        dataPoints,
+        label,
+        numBins = 10,
+        xAxisLabel = "Valor",
+        yAxisLabel = "Frequência"
+      ) {
+        destroyChart(chartId);
+        const canvas = document.getElementById(chartId);
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const textColor = getComputedStyle(bodyElement)
+          .getPropertyValue("--text-secondary")
+          .trim();
+        if (!dataPoints || dataPoints.length === 0) {
+          ctx.textAlign = "center";
+          ctx.fillStyle = textColor;
+          ctx.fillText("N/A", canvas.width / 2, canvas.height / 2);
+          return;
+        }
+        const validData = dataPoints.filter(
+          (d) => typeof d === "number" && !isNaN(d)
+        );
+        if (validData.length === 0) {
+          ctx.textAlign = "center";
+          ctx.fillStyle = textColor;
+          ctx.fillText("N/A", canvas.width / 2, canvas.height / 2);
+          return;
+        }
+        const minVal = Math.min(...validData);
+        let maxVal = Math.max(...validData);
+        if (minVal === maxVal) {
+          maxVal = minVal + numBins;
+          if (minVal === 0 && maxVal === 0) maxVal = numBins;
+        }
+        const range = maxVal - minVal;
+        const effectiveNumBins =
+          range > 0 && range < numBins
+            ? Math.max(1, Math.ceil(range))
+            : numBins;
+        const binWidth =
+          range === 0 ? 1 : Math.max(0.1, range / effectiveNumBins);
+        const bins = new Array(effectiveNumBins).fill(0);
+        const labels = new Array(effectiveNumBins);
+        for (let i = 0; i < effectiveNumBins; i++) {
+          const binStart = minVal + i * binWidth;
+          const binEnd = binStart + binWidth;
+          const precision = binWidth < 1 ? 1 : 0;
+          labels[i] = `${binStart.toFixed(precision)}-${binEnd.toFixed(
+            precision
+          )}`;
+        }
+        validData.forEach((value) => {
+          let binIndex =
+            binWidth === 0 ? 0 : Math.floor((value - minVal) / binWidth);
+          binIndex = Math.max(0, Math.min(binIndex, effectiveNumBins - 1));
+          // Ensure the max value falls into the last bin
+          if (value === maxVal && binIndex < effectiveNumBins - 1) {
+            binIndex = effectiveNumBins - 1;
+          }
+          if (binIndex >= 0 && binIndex < effectiveNumBins) {
+            bins[binIndex]++;
+          }
+        });
+        renderBarChart(chartId, labels, bins, label, xAxisLabel, yAxisLabel);
+      }
+
+      // --- Column Toggle Functions (Unchanged) ---
+      function loadColumnVisibility() {
+        try {
+          const s = localStorage.getItem(LOCAL_STORAGE_KEY_COLUMNS);
+          if (s) {
+            const p = JSON.parse(s);
+            if (typeof p === "object" && p !== null) {
+              const v = {};
+              let u = false;
+              TOGGLEABLE_COLUMNS.forEach((c) => {
+                const sv = p[c.index];
+                if (typeof sv === "boolean") {
+                  v[c.index] = sv;
+                } else {
+                  v[c.index] = c.defaultVisible;
+                  u = true;
+                }
+              });
+              // Check for keys in storage that are no longer in TOGGLEABLE_COLUMNS
+              for (const k in p) {
+                if (
+                  !TOGGLEABLE_COLUMNS.some((c) => c.index === parseInt(k, 10))
+                ) {
+                  u = true;
+                }
+              }
+              // If mismatch found, save the corrected visibility state
+              if (u) {
+                saveColumnVisibility(v);
+              }
+              return v;
+            } else {
+              // If stored value is not an object, remove it
+              localStorage.removeItem(LOCAL_STORAGE_KEY_COLUMNS);
+            }
+          }
+        } catch (e) {
+          // If parsing fails, remove the item
+          console.error("Error loading column visibility:", e);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_COLUMNS);
+        }
+        // Return default visibility if nothing valid was found in storage
+        const d = {};
+        TOGGLEABLE_COLUMNS.forEach((c) => {
+          d[c.index] = c.defaultVisible;
+        });
+        return d;
+      }
+      function saveColumnVisibility(visibility) {
+        try {
+          localStorage.setItem(
+            LOCAL_STORAGE_KEY_COLUMNS,
+            JSON.stringify(visibility)
+          );
+        } catch (e) {
+          console.error("Error saving column visibility:", e);
+        }
+      }
+      function setColumnVisibility(columnIndex, isVisible) {
+        if (!detailsTable) return;
+        // Select both header and body cells for the column
+        const cells = detailsTable.querySelectorAll(
+          `th[data-column-index="${columnIndex}"], td[data-column-index="${columnIndex}"]`
+        );
+        cells.forEach((cell) => {
+          cell.classList.toggle("column-hidden", !isVisible);
+        });
+        // Update the corresponding toggle button's state
+        if (columnTogglesContainer) {
+          const button = columnTogglesContainer.querySelector(
+            `button[data-column-index="${columnIndex}"]`
+          );
+          if (button) {
+            button.classList.toggle("active", isVisible);
+          }
+        }
+      }
+      function createColumnToggles(initialVisibility) {
+        if (!columnTogglesContainer) return;
+        columnTogglesContainer.innerHTML = ""; // Clear existing toggles
+        TOGGLEABLE_COLUMNS.forEach((col) => {
+          const isVisible = initialVisibility[col.index] ?? col.defaultVisible;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "toggle-button";
+          button.dataset.columnIndex = col.index;
+          button.textContent = col.label;
+          button.classList.toggle("active", isVisible); // Set initial active state
+          // Add event listener to handle clicks
+          button.addEventListener("click", (event) => {
+            const btn = event.target;
+            const index = parseInt(btn.dataset.columnIndex, 10);
+            const currentVisibility = loadColumnVisibility(); // Get latest state
+            const newVisibility = !(
+              currentVisibility[index] ?? col.defaultVisible
+            ); // Toggle state
+            setColumnVisibility(index, newVisibility); // Apply visibility to table and button
+            currentVisibility[index] = newVisibility; // Update state object
+            saveColumnVisibility(currentVisibility); // Save updated state
+          });
+          columnTogglesContainer.appendChild(button);
+        });
+      }
+
+      // --- Details Table Population (Unchanged) ---
+      function populateTable(prList) {
+        if (!detailsTableBody || !detailsTableHead) return;
+        detailsTableBody.innerHTML = "";
+        const numCols =
+          detailsTableHead.rows[0]?.cells.length ||
+          TOGGLEABLE_COLUMNS.length + 2; // +2 for non-toggleable # and Title
+        if (!prList || prList.length === 0) {
+          detailsTableBody.innerHTML = `<tr><td colspan="${numCols}">Nenhum PR encontrado com os filtros aplicados.</td></tr>`;
+          return;
+        }
+        prList.forEach((pr) => {
+          const row = detailsTableBody.insertRow();
+          const mets = pr.calculatedMetrics || {}; // Metrics are attached directly
+          const addCell = (cont, idx, isHtml = false) => {
+            const cell = row.insertCell();
+            if (isHtml) {
+              cell.innerHTML = cont;
+            } else {
+              cell.textContent = cont;
+            }
+            cell.dataset.columnIndex = idx; // Set data attribute for toggling
+            return cell;
+          };
+          // Find unique approvers for this PR
+          let approvers = "--";
+          if (pr.reviews?.nodes) {
+            const uniqueApprovers = [
+              ...new Set(
+                pr.reviews.nodes
+                  .filter((r) => r.state === "APPROVED" && r.author?.login)
+                  .map((r) => r.author.login)
+              ),
+            ];
+            if (uniqueApprovers.length > 0) {
+              approvers = uniqueApprovers.join(", ");
+            }
+          }
+          // Add cells, matching the order in TOGGLEABLE_COLUMNS + fixed columns
+          addCell(
+            // Fixed Column 0: PR Number Link
+            `<a href="${pr.url || "#"}" target="_blank">${pr.number}</a>`,
+            0,
+            true
+          );
+          addCell(pr.title || "N/A", 1); // Fixed Column 1: Title
+          addCell(pr.author?.login || "N/A", 2); // Toggleable Column 2
+          addCell(pr.state || "N/A", 3); // Toggleable Column 3
+          addCell(formatDate(pr.createdAt), 4); // Toggleable Column 4
+          addCell(pr.baseRefName || "N/A", 5); // Toggleable Column 5
+          addCell(approvers, 6); // Toggleable Column 6
+          addCell(formatHours(mets.timeInDraft), 7); // Toggleable Column 7
+          addCell(formatHours(mets.timeToFirstReview), 8); // Toggleable Column 8
+          addCell(formatHours(mets.reviewTime), 9); // Toggleable Column 9
+          addCell(formatHours(mets.mergeTime), 10); // Toggleable Column 10
+          addCell(formatHours(mets.cycleTime), 11); // Toggleable Column 11
+          addCell(mets.linesChanged ?? "--", 12); // Toggleable Column 12
+          addCell(mets.commentCount ?? "--", 13); // Toggleable Column 13
+          addCell(formatDate(pr.mergedAt), 14); // Toggleable Column 14
+        });
+        // Apply initial visibility based on saved preferences
+        const currentVisibility = loadColumnVisibility();
+        TOGGLEABLE_COLUMNS.forEach((col) => {
+          setColumnVisibility(
+            col.index,
+            currentVisibility[col.index] ?? col.defaultVisible
+          );
+        });
+        // Ensure fixed columns are always visible (though they aren't toggled)
+        setColumnVisibility(0, true);
+        setColumnVisibility(1, true);
+      }
+      function ensureDetailsStructure() {
+        // Check if the details section already exists
+        if (detailsSectionContainer.querySelector("#pr-details-table")) {
+          // If it exists, just re-select the elements
+          detailsTable = document.getElementById("pr-details-table");
+          detailsTableHead = detailsTable?.querySelector("thead");
+          detailsTableBody = document.getElementById("pr-details-tbody");
+          detailsLoadingIndicator = document.getElementById(
+            "loading-indicator-details"
+          );
+          detailsErrorMessageDiv = document.getElementById(
+            "error-message-details"
+          );
+          columnTogglesContainer = detailsSectionContainer.querySelector(
+            ".column-toggles .toggle-grid"
+          );
+          return; // Structure exists, no need to recreate
+        }
+
+        // If it doesn't exist, create the HTML structure
+        detailsSectionContainer.innerHTML = `
+              <div class="details-container card">
+                  <h2>Detalhes por Pull Request</h2>
+                  <div class="column-toggles card">
+                      <h3>Exibir Colunas:</h3>
+                      <div class="toggle-grid">
+                          </div>
+                  </div>
+                  <div id="loading-indicator-details" class="loading" style="display: none;">Carregando detalhes...</div>
+                  <div id="error-message-details" class="error" style="display: none;"></div>
+                  <div class="table-wrapper">
+                      <table id="pr-details-table">
+                          <thead>
+                              <tr>
+                                  <th data-column-index="0"># PR</th>
+                                  <th data-column-index="1">Título</th>
+                                  ${TOGGLEABLE_COLUMNS.map(
+                                    (col) =>
+                                      `<th data-column-index="${col.index}">${col.label}</th>`
+                                  ).join("")}
+                              </tr>
+                          </thead>
+                          <tbody id="pr-details-tbody">
+                              </tbody>
+                      </table>
+                  </div>
+              </div>`;
+
+        // Select the newly created elements
+        detailsTable = document.getElementById("pr-details-table");
+        detailsTableHead = detailsTable?.querySelector("thead");
+        detailsTableBody = document.getElementById("pr-details-tbody");
+        detailsLoadingIndicator = document.getElementById(
+          "loading-indicator-details"
+        );
+        detailsErrorMessageDiv = document.getElementById(
+          "error-message-details"
+        );
+        columnTogglesContainer = detailsSectionContainer.querySelector(
+          ".column-toggles .toggle-grid"
+        );
+
+        // Create the toggle buttons based on initial visibility state
+        const initialVisibility = loadColumnVisibility();
+        createColumnToggles(initialVisibility);
+        // Apply initial visibility to the newly created table columns
+        TOGGLEABLE_COLUMNS.forEach((col) => {
+          setColumnVisibility(
+            col.index,
+            initialVisibility[col.index] ?? col.defaultVisible
+          );
+        });
+        // Ensure fixed columns are visible
+        setColumnVisibility(0, true);
+        setColumnVisibility(1, true);
+      }
+
+      // --- Metrics Calculation (Copied from backend/metricsCalculator.js) ---
+      function getTimeDifferenceInHours(dateStartStr, dateEndStr) {
+        if (!dateStartStr || !dateEndStr) return null;
+        try {
+          const start = new Date(dateStartStr);
+          const end = new Date(dateEndStr);
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+          const diffMilliseconds = end.getTime() - start.getTime();
+          return diffMilliseconds / (1000 * 60 * 60); // Convert ms to hours
+        } catch (e) {
+          console.error("Error calculating time difference:", e);
+          return null;
+        }
+      }
+      function findFirstReviewTime(pr) {
+        // Check direct reviews first (more reliable for state)
+        const actualReviews = (pr.reviews?.nodes || [])
+          .filter(
+            (review) =>
+              // Consider comments only if they are part of a review request/change request state?
+              // For simplicity, let's count any review submission (Approve, Request Changes, Comment)
+              review.state === "APPROVED" ||
+              review.state === "CHANGES_REQUESTED" ||
+              review.state === "COMMENTED" ||
+              review.state === "DISMISSED"
+          )
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Oldest first
+        if (actualReviews.length > 0) return actualReviews[0].createdAt;
+
+        // Fallback: Check timeline items (less reliable for state, but might catch early comments)
+        const reviewTimelineItems = (pr.timelineItems?.nodes || [])
+          .filter(
+            (item) =>
+              item.__typename === "PullRequestReview" &&
+              (item.state === "APPROVED" ||
+                item.state === "CHANGES_REQUESTED" ||
+                item.state === "COMMENTED" ||
+                item.state === "DISMISSED")
+          )
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        if (reviewTimelineItems.length > 0)
+          return reviewTimelineItems[0].createdAt;
+
+        return null; // No review found
+      }
+      function findReadyForReviewTime(pr) {
+        const readyEvents = (pr.timelineItems?.nodes || [])
+          .filter((item) => item.__typename === "ReadyForReviewEvent")
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Sort chronological
+        const draftEvents = (pr.timelineItems?.nodes || [])
+          .filter((item) => item.__typename === "ConvertToDraftEvent")
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+        const lastReadyEvent =
+          readyEvents.length > 0 ? readyEvents[readyEvents.length - 1] : null;
+        const lastDraftEvent =
+          draftEvents.length > 0 ? draftEvents[draftEvents.length - 1] : null;
+
+        // If the last relevant event was 'Ready for Review'
+        if (
+          lastReadyEvent &&
+          (!lastDraftEvent ||
+            new Date(lastReadyEvent.createdAt) >
+              new Date(lastDraftEvent.createdAt))
+        ) {
+          return lastReadyEvent.createdAt;
+        }
+
+        // If it was never marked ready explicitly, but is *not* currently draft, it was ready from creation
+        if (!lastReadyEvent && !pr.isDraft) {
+          return pr.createdAt;
+        }
+
+        // If it's currently draft and was never marked ready, or the last event was 'Convert to Draft'
+        return null;
+      }
+      function findLastApprovalTime(pr) {
+        const approvals = (pr.reviews?.nodes || [])
+          .filter((review) => review.state === "APPROVED")
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort descending (most recent first)
+        return approvals.length > 0 ? approvals[0].createdAt : null;
+      }
+      /**
+       * Calculates various PR metrics from a list of PR data.
+       * @param {Array<object>} prList - Array of PR nodes from GitHub API.
+       * @returns {object} Object containing calculated metrics arrays and summary.
+       */
+      function calculateMetrics(prList) {
+        const initialMetrics = {
+          summary: { count: 0, open: 0, merged: 0, closed: 0 },
+          timeToFirstReview: [], // { prNumber, hours }
+          timeInDraft: [], // { prNumber, hours }
+          reviewerContribution: {}, // { reviewerLogin: count }
+          prCycleTime: [], // { prNumber, hours }
+          reviewTime: [], // { prNumber, hours }
+          mergeTime: [], // { prNumber, hours }
+          prSize: [], // { prNumber, linesChanged, filesChanged }
+          reviewDepth: [], // { prNumber, commentCount }
+          errors: [], // { prNumber, message }
+        };
+
+        if (!prList || prList.length === 0) {
+          return initialMetrics;
+        }
+
+        const metrics = JSON.parse(JSON.stringify(initialMetrics)); // Deep copy to avoid mutation issues
+        metrics.summary.count = prList.length;
+        metrics.summary.open = prList.filter(
+          (pr) => pr.state === "OPEN"
+        ).length;
+        metrics.summary.merged = prList.filter(
+          (pr) => pr.state === "MERGED"
+        ).length;
+        metrics.summary.closed = prList.filter(
+          (pr) => pr.state === "CLOSED" && !pr.mergedAt // Explicitly check not merged
+        ).length;
+
+        prList.forEach((pr) => {
+          try {
+            const prNumber = pr.number;
+            const createdAt = pr.createdAt;
+            const mergedAt = pr.mergedAt;
+
+            // --- Time in Draft ---
+            // Time from creation until it was last marked 'Ready for Review'
+            const readyAt = findReadyForReviewTime(pr);
+            // Only calculate if it was actually marked ready *after* creation
+            if (readyAt && new Date(readyAt) > new Date(createdAt)) {
+              const draftHours = getTimeDifferenceInHours(createdAt, readyAt);
+              // Ensure positive duration, ignore if ready immediately on creation
+              if (draftHours !== null && draftHours > 0.01) {
+                // Use a small threshold to avoid floating point issues
+                metrics.timeInDraft.push({ prNumber, hours: draftHours });
+              }
+            }
+
+            // --- Time to First Review ---
+            // Calculated from when it was last marked ready for review
+            if (readyAt) {
+              const firstReviewAt = findFirstReviewTime(pr);
+              // Ensure review happened at or after ready time
+              if (
+                firstReviewAt &&
+                new Date(firstReviewAt) >= new Date(readyAt)
+              ) {
+                const reviewWaitHours = getTimeDifferenceInHours(
+                  readyAt,
+                  firstReviewAt
+                );
+                if (reviewWaitHours !== null) {
+                  metrics.timeToFirstReview.push({
+                    prNumber,
+                    hours: reviewWaitHours,
+                  });
+                }
+              }
+            }
+
+            // --- Reviewer Contribution ---
+            (pr.reviews?.nodes || []).forEach((review) => {
+              if (review.state === "APPROVED" && review.author?.login) {
+                const login = review.author.login;
+                metrics.reviewerContribution[login] =
+                  (metrics.reviewerContribution[login] || 0) + 1;
+              }
+            });
+
+            // --- PR Cycle Time (Lead Time) ---
+            // From creation to merge.
+            if (mergedAt) {
+              const cycleHours = getTimeDifferenceInHours(createdAt, mergedAt);
+              if (cycleHours !== null) {
+                metrics.prCycleTime.push({ prNumber, hours: cycleHours });
+              }
+            }
+
+            // --- Review Time ---
+            // From first review submission to final approval OR merge (whichever is relevant and happens last)
+            const firstReviewAtForReviewTime = findFirstReviewTime(pr);
+            const lastApprovalAt = findLastApprovalTime(pr);
+
+            // Determine the end point for review time calculation
+            let reviewEndAt = null;
+            if (lastApprovalAt && mergedAt) {
+              // If approved and merged, use the later of the two (usually merge)
+              reviewEndAt =
+                new Date(lastApprovalAt) > new Date(mergedAt)
+                  ? lastApprovalAt
+                  : mergedAt;
+            } else if (lastApprovalAt) {
+              // If approved but not merged (e.g., closed), use approval time
+              reviewEndAt = lastApprovalAt;
+            } else if (
+              mergedAt &&
+              firstReviewAtForReviewTime &&
+              new Date(mergedAt) >= new Date(firstReviewAtForReviewTime)
+            ) {
+              // If merged without explicit approval after first review, use merge time
+              reviewEndAt = mergedAt;
+            } else if (
+              pr.closedAt &&
+              !mergedAt &&
+              firstReviewAtForReviewTime &&
+              new Date(pr.closedAt) >= new Date(firstReviewAtForReviewTime)
+            ) {
+              // If closed without merge after first review, use close time
+              reviewEndAt = pr.closedAt;
+            }
+
+            if (firstReviewAtForReviewTime && reviewEndAt) {
+              const reviewHours = getTimeDifferenceInHours(
+                firstReviewAtForReviewTime,
+                reviewEndAt
+              );
+              // Ensure non-negative duration
+              if (reviewHours !== null && reviewHours >= 0) {
+                metrics.reviewTime.push({ prNumber, hours: reviewHours });
+              }
+            }
+
+            // --- Merge Time ---
+            // From last approval to merge
+            if (lastApprovalAt && mergedAt) {
+              const mergeWaitHours = getTimeDifferenceInHours(
+                lastApprovalAt,
+                mergedAt
+              );
+              // Ensure merge is at or after approval
+              if (mergeWaitHours !== null && mergeWaitHours >= 0) {
+                metrics.mergeTime.push({ prNumber, hours: mergeWaitHours });
+              }
+            }
+
+            // --- PR Size ---
+            const linesChanged = (pr.additions || 0) + (pr.deletions || 0);
+            metrics.prSize.push({
+              prNumber,
+              linesChanged,
+              filesChanged: pr.changedFiles || 0,
+            });
+
+            // --- Review Depth (Total Comments) ---
+            // Sum of general PR comments + comments within each review
+            const generalCommentCount = pr.comments?.totalCount || 0;
+            const reviewCommentCount = (pr.reviews?.nodes || []).reduce(
+              (sum, review) => sum + (review.comments?.totalCount || 0),
+              0
+            );
+            metrics.reviewDepth.push({
+              prNumber,
+              commentCount: generalCommentCount + reviewCommentCount,
+            });
+          } catch (error) {
+            console.error(
+              `Error processing PR #${pr?.number || "unknown"}:`,
+              error
+            );
+            metrics.errors.push({
+              prNumber: pr?.number || "unknown",
+              message: error.message,
+            });
+          }
+        });
+
+        // Sort reviewer contribution by count (descending)
+        metrics.reviewerContribution = Object.entries(
+          metrics.reviewerContribution
+        )
+          .sort(([, countA], [, countB]) => countB - countA) // Sort descending by count
+          .reduce((obj, [key, value]) => {
+            obj[key] = value; // Reconstruct sorted object
+            return obj;
+          }, {});
+
+        console.log("[MetricsCalculator] Metrics calculated successfully.");
+        return metrics;
+      }
+
+      // --- GitHub API Fetching ---
+      /**
+       * Fetches data directly from the GitHub GraphQL API using browser's fetch.
+       * @param {string} query - The GraphQL query string.
+       * @param {object} variables - Variables for the GraphQL query.
+       * @param {string} token - GitHub Personal Access Token.
+       * @param {string} apiUrl - The full URL to the GHE GraphQL endpoint.
+       * @returns {Promise<object>} The JSON response from the API.
+       * @throws {Error} If the fetch operation fails or returns errors.
+       */
+      async function fetchGraphQL(query, variables, token, apiUrl) {
+        console.log(
+          `[GraphQL] Fetching data for owner=${variables.owner}, name=${variables.name}...`
+        );
+        try {
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `bearer ${token}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({ query, variables }),
+          });
+
+          if (!response.ok) {
+            let errorDetail = `Status: ${response.status} ${response.statusText}`;
+            try {
+              // Try to get more details from the response body
+              const errorBody = await response.text();
+              errorDetail += ` - Body: ${errorBody.substring(0, 500)}`; // Limit body length
+            } catch (e) {
+              /* Ignore error reading body */
+            }
+            // Specific check for CORS errors (though fetch might just throw NetworkError)
+            if (response.status === 0) {
+              throw new Error(
+                "Erro de Rede: Não foi possível conectar à API. Isso pode ser um problema de CORS. Verifique o console do navegador (F12) e garanta que o servidor GHE permite requisições desta origem, ou use uma extensão de navegador para CORS (apenas para teste)."
+              );
+            }
+            // Specific check for 401 Unauthorized
+            if (response.status === 401) {
+              throw new Error(
+                `Erro API GitHub: 401 Não Autorizado. Verifique se seu Personal Access Token está correto, válido e possui o escopo 'repo' necessário.`
+              );
+            }
+            throw new Error(`Requisição API GitHub falhou. ${errorDetail}`);
+          }
+
+          const data = await response.json();
+
+          if (data.errors) {
+            console.error(
+              "[GraphQL] API Errors:",
+              JSON.stringify(data.errors, null, 2)
+            );
+            const errorMessages = data.errors
+              .map((err) => err.message)
+              .join("; ");
+            throw new Error(`API GitHub retornou erros: ${errorMessages}`);
+          }
+          console.log("[GraphQL] Fetch successful.");
+          return data;
+        } catch (error) {
+          console.error("[GraphQL] Fetch error:", error);
+          // Add more specific error messages based on error type
+          if (error.message.includes("Failed to fetch")) {
+            throw new Error(
+              "Erro de Rede: Falha ao buscar dados da API. Verifique sua conexão, o Hostname GHE e possíveis problemas de CORS (veja console F12)."
+            );
+          }
+          throw error; // Re-throw other errors
+        }
+      }
+
+      /**
+       * Fetches all pull requests for the configured repository directly from the browser.
+       * Handles pagination and uses client-side caching.
+       * @param {string} owner - Repository owner.
+       * @param {string} repo - Repository name.
+       * @param {string} token - GitHub PAT.
+       * @param {string} apiUrl - Full GHE API URL.
+       * @param {string[]} [states=['OPEN', 'MERGED', 'CLOSED']] - Filter PRs by state.
+       * @returns {Promise<Array<object> | null>} A list of all pull request nodes, or null on critical failure.
+       */
+      async function getAllPullRequests(
+        owner,
+        repo,
+        token,
+        apiUrl,
+        states = ["OPEN", "MERGED", "CLOSED"]
+      ) {
+        const cacheKey = getCacheKey(owner, repo, states);
+        const cachedData = getCache(cacheKey);
+        if (cachedData) {
+          console.log("[GitHubClient] Returning cached PR data.");
+          return cachedData;
+        }
+
+        console.log(
+          `[GitHubClient] Fetching all PRs for ${owner}/${repo} with states: ${states.join(
+            ", "
+          )}...`
+        );
+        let allPRs = [];
+        let hasNextPage = true;
+        let afterCursor = null;
+        let pageCount = 0;
+
+        while (hasNextPage) {
+          pageCount++;
+          console.log(
+            `[GitHubClient] Fetching page ${pageCount}... (after: ${
+              afterCursor || "start"
+            })`
+          );
+          const variables = {
+            owner: owner,
+            name: repo,
+            first: PR_PAGE_SIZE,
+            after: afterCursor,
+            states: states,
+          };
+
+          try {
+            // Show intermediate loading state
+            showLoading(`Carregando dados... (Página ${pageCount})`);
+
+            const data = await fetchGraphQL(
+              PULL_REQUEST_QUERY,
+              variables,
+              token,
+              apiUrl
+            );
+
+            if (!data?.data?.repository?.pullRequests) {
+              console.warn(
+                "[GitHubClient] Received unexpected data structure from API:",
+                data
+              );
+              throw new Error(
+                "Estrutura de dados inesperada recebida da API do GitHub."
+              );
+            }
+
+            const prData = data.data.repository.pullRequests;
+            const fetchedPRs = prData.nodes || [];
+            allPRs = allPRs.concat(fetchedPRs.filter((pr) => pr !== null)); // Filter out null nodes if any
+
+            hasNextPage = prData.pageInfo.hasNextPage;
+            afterCursor = prData.pageInfo.endCursor;
+
+            console.log(
+              `[GitHubClient] Fetched ${fetchedPRs.length} PRs on page ${pageCount}. Total fetched: ${allPRs.length}. Has next page: ${hasNextPage}`
+            );
+          } catch (error) {
+            console.error(
+              `[GitHubClient] Error fetching page ${pageCount}:`,
+              error
+            );
+            // Stop pagination on error
+            hasNextPage = false;
+            // Throw the error up to be displayed to the user
+            throw new Error(
+              `Falha ao buscar a página ${pageCount} de PRs: ${error.message}`
+            );
+          }
+        }
+
+        console.log(
+          `[GitHubClient] Finished fetching. Total PRs retrieved: ${allPRs.length}`
+        );
+        // Store the successfully fetched data in cache
+        if (allPRs.length > 0) {
+          setCache(cacheKey, allPRs, CACHE_TTL_MS);
+        }
+
+        return allPRs;
+      }
+
+      // --- Filter Data Function (Client-Side) ---
+      function filterPrData(prList, filters) {
+        if (!Array.isArray(prList)) {
+          console.warn(
+            "[Filter] filterPrData received invalid prList:",
+            prList
+          );
+          return [];
+        }
+        console.log("[Filter] Applying filters:", filters);
+        let filteredList = [...prList];
+
+        // Destructure filters for easier access
+        const {
+          author,
+          approver,
+          targetBranch,
+          status,
+          excludeAuthor,
+          excludeBranchPattern,
+          startDate, // Expecting Date objects or null
+          endDate, // Expecting Date objects or null
+        } = filters;
+
+        filteredList = filteredList.filter((pr) => {
+          if (!pr || !pr.createdAt) return false;
+
+          // Date Filtering
+          const prCreatedAt = new Date(pr.createdAt);
+          if (isNaN(prCreatedAt.getTime())) return false; // Skip PRs with invalid creation date
+          if (startDate && prCreatedAt < startDate) return false;
+          if (endDate && prCreatedAt >= endDate) return false; // End date is exclusive
+
+          // Text/Select Filtering (Case-insensitive where appropriate)
+          if (
+            author &&
+            pr.author?.login?.toLowerCase() !== author.toLowerCase()
+          )
+            return false;
+          if (status && pr.state !== status) return false; // Status is case-sensitive in GitHub API
+          if (targetBranch && pr.baseRefName !== targetBranch) return false;
+
+          // Approver Filtering
+          if (approver) {
+            const hasApproved = pr.reviews?.nodes?.some(
+              (r) =>
+                r.state === "APPROVED" &&
+                r.author?.login?.toLowerCase() === approver.toLowerCase()
+            );
+            if (!hasApproved) return false;
+          }
+
+          // Exclusion Filtering
+          if (
+            excludeAuthor &&
+            pr.author?.login?.toLowerCase() === excludeAuthor.toLowerCase()
+          )
+            return false;
+          if (excludeBranchPattern && pr.baseRefName) {
+            if (excludeBranchPattern.endsWith("/**")) {
+              const prefix = excludeBranchPattern.slice(0, -3); // Remove '/**'
+              if (pr.baseRefName.startsWith(prefix)) return false;
+            } else if (pr.baseRefName === excludeBranchPattern) {
+              return false;
+            }
+          }
+
+          return true; // Keep PR if none of the filters excluded it
+        });
+
+        console.log(
+          `[Filter] Filtering: ${prList.length} PRs -> ${filteredList.length} PRs`
+        );
+        return filteredList;
+      }
+
+      // --- Main Data Fetching and Dashboard Update ---
+      /**
+       * Updates the dashboard UI elements (summary, charts, details table)
+       * based on the provided filtered data and calculated metrics.
+       * @param {Array<object>} filteredPrList - The list of PRs after filtering.
+       * @param {object} metricsData - The calculated metrics object.
+       */
+      function updateDashboardAndCharts(filteredPrList, metricsData) {
+        console.log("Updating dashboard and charts...");
+
+        if (!metricsData || !filteredPrList) {
+          showError("Dados inválidos para atualização do dashboard.");
+          return;
+        }
+
+        currentFilteredPrData = filteredPrList; // Store filtered data
+        currentMetricsData = metricsData; // Store metrics
+
+        // Update Summary
+        const summary = metricsData.summary || {
+          count: 0,
+          open: 0,
+          merged: 0,
+          closed: 0,
+        };
+        summaryCountSpan.textContent = `(${summary.count} PRs)`;
+        summaryOpenSpan.textContent = summary.open;
+        summaryMergedSpan.textContent = summary.merged;
+        summaryClosedSpan.textContent = summary.closed;
+
+        // Prepare data for charts
+        const timeToFirstReviewHours =
+          metricsData.timeToFirstReview?.map((item) => item.hours) || [];
+        const timeInDraftHours =
+          metricsData.timeInDraft?.map((item) => item.hours) || [];
+        const prCycleTimeHours =
+          metricsData.prCycleTime?.map((item) => item.hours) || [];
+        const reviewTimeHours =
+          metricsData.reviewTime?.map((item) => item.hours) || [];
+        const mergeTimeHours =
+          metricsData.mergeTime?.map((item) => item.hours) || [];
+        const prSizeLines =
+          metricsData.prSize?.map((item) => item.linesChanged) || [];
+        const reviewDepthComments =
+          metricsData.reviewDepth?.map((item) => item.commentCount) || [];
+
+        // Render Charts
+        renderHistogramChart(
+          "time-to-first-review-chart",
+          timeToFirstReviewHours,
+          "Cont. PRs",
+          10,
+          "Tempo (h)",
+          "Freq."
+        );
+        renderHistogramChart(
+          "time-in-draft-chart",
+          timeInDraftHours,
+          "Cont. PRs",
+          10,
+          "Tempo (h)",
+          "Freq."
+        );
+        renderHistogramChart(
+          "pr-cycle-time-chart",
+          prCycleTimeHours,
+          "Cont. PRs",
+          10,
+          "Tempo (h)",
+          "Freq."
+        );
+        renderHistogramChart(
+          "review-time-chart",
+          reviewTimeHours,
+          "Cont. PRs",
+          10,
+          "Tempo (h)",
+          "Freq."
+        );
+        renderHistogramChart(
+          "merge-time-chart",
+          mergeTimeHours,
+          "Cont. PRs",
+          10,
+          "Tempo (h)",
+          "Freq."
+        );
+        renderHistogramChart(
+          "pr-size-chart",
+          prSizeLines,
+          "Cont. PRs",
+          10,
+          "Linhas Alt.",
+          "Freq."
+        );
+        renderHistogramChart(
+          "review-depth-chart",
+          reviewDepthComments,
+          "Cont. PRs",
+          10,
+          "Nº Coment.",
+          "Freq."
+        );
+
+        // Render Reviewer Contribution Chart
+        const reviewerContributions = metricsData.reviewerContribution || {};
+        const topN = 15;
+        const reviewerLabels = Object.keys(reviewerContributions).slice(
+          0,
+          topN
+        );
+        const reviewerData = Object.values(reviewerContributions).slice(
+          0,
+          topN
+        );
+        renderBarChart(
+          "reviewer-contribution-chart",
+          reviewerLabels,
+          reviewerData,
+          "PRs Aprovados",
+          "Aprovador",
+          "Nº Aprov."
+        );
+
+        // Update Average Value Displays
+        avgTimeToFirstReview.textContent =
+          calculateAverage(timeToFirstReviewHours) + " h";
+        avgTimeInDraft.textContent = calculateAverage(timeInDraftHours) + " h";
+        avgPrCycleTime.textContent = calculateAverage(prCycleTimeHours) + " h";
+        avgReviewTime.textContent = calculateAverage(reviewTimeHours) + " h";
+        avgMergeTime.textContent = calculateAverage(mergeTimeHours) + " h";
+        avgPrSize.textContent = calculateAverage(prSizeLines, 0) + " linhas";
+        avgReviewDepth.textContent =
+          calculateAverage(reviewDepthComments) + " comentários";
+
+        // Update Details Table if Visible
+        if (isDetailsVisible) {
+          // Attach calculated metrics to each PR object for the table
+          const prMetricsMap = new Map();
+          metricsData.timeInDraft?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              timeInDraft: m.hours,
+            })
+          );
+          metricsData.timeToFirstReview?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              timeToFirstReview: m.hours,
+            })
+          );
+          metricsData.reviewTime?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              reviewTime: m.hours,
+            })
+          );
+          metricsData.mergeTime?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              mergeTime: m.hours,
+            })
+          );
+          metricsData.prCycleTime?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              cycleTime: m.hours,
+            })
+          );
+          metricsData.prSize?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              linesChanged: m.linesChanged,
+            })
+          );
+          metricsData.reviewDepth?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              commentCount: m.commentCount,
+            })
+          );
+
+          const prListWithMetrics = filteredPrList.map((pr) => ({
+            ...pr,
+            calculatedMetrics: prMetricsMap.get(pr.number) || {},
+          }));
+
+          ensureDetailsStructure(); // Make sure table structure exists
+          populateTable(prListWithMetrics); // Populate the table
+        }
+
+        // Display calculation errors/warnings if any
+        if (metricsData.errors && metricsData.errors.length > 0) {
+          const errorMsg = `Avisos no cálculo de métricas para ${metricsData.errors.length} PR(s). Ver console (F12) para detalhes.`;
+          showError(errorMsg); // Show in main error area
+          if (isDetailsVisible) {
+            showDetailsError(errorMsg); // Also show in details error area if visible
+          }
+          console.warn("Metric calculation errors:", metricsData.errors);
+        }
+      }
+
+      /**
+       * Main function to fetch/retrieve data, filter it, calculate metrics, and update the UI.
+       */
+      async function refreshDashboard() {
+        showLoading();
+        hideError(); // Clear previous errors
+
+        // --- 1. Get Configuration ---
+        const gheHostname = gheHostnameInput.value.trim();
+        const owner = repoOwnerInput.value.trim();
+        const repo = repoNameInput.value.trim();
+        const token = githubTokenInput.value; // Get token directly from input
+
+        if (!gheHostname || !owner || !repo || !token) {
+          showError(
+            "Erro: Preencha os campos de Configuração GitHub (Hostname, Dono, Repositório, Token)."
+          );
+          hideLoading();
+          return;
+        }
+
+        const apiUrl = `https://${gheHostname}/api/graphql`;
+
+        // --- 2. Fetch or Get Raw PR Data from Cache ---
+        try {
+          // States to fetch (usually all for comprehensive filtering)
+          const statesToFetch = ["OPEN", "MERGED", "CLOSED"];
+          currentRawPrData = await getAllPullRequests(
+            owner,
+            repo,
+            token,
+            apiUrl,
+            statesToFetch
+          );
+
+          if (!currentRawPrData) {
+            // Error handled within getAllPullRequests, message shown via throw
+            hideLoading();
+            return; // Stop if fetching failed critically
+          }
+
+          // --- 3. Populate Filter Datalists (based on fetched raw data) ---
+          populateFilterOptions(currentRawPrData);
+
+          // --- 4. Apply Filters ---
+          const currentFilters = getCurrentFilters();
+          const filteredData = filterPrData(currentRawPrData, currentFilters);
+
+          // --- 5. Calculate Metrics ---
+          const metrics = calculateMetrics(filteredData);
+
+          // --- 6. Update Dashboard ---
+          updateDashboardAndCharts(filteredData, metrics);
+        } catch (error) {
+          console.error("Error during dashboard refresh:", error);
+          showError(`Erro: ${error.message}`);
+          // Clear potentially outdated chart/table data on error
+          Object.keys(chartInstances).forEach(destroyChart);
+          if (detailsTableBody)
+            detailsTableBody.innerHTML = `<tr><td colspan="15">Erro ao carregar dados.</td></tr>`;
+          // Reset summary
+          summaryCountSpan.textContent = `(Erro)`;
+          summaryOpenSpan.textContent = "?";
+          summaryMergedSpan.textContent = "?";
+          summaryClosedSpan.textContent = "?";
+        } finally {
+          hideLoading();
+        }
+      }
+
+      // --- Filter Options Population ---
+      function populateFilterOptions(prList) {
+        if (!Array.isArray(prList)) return;
+
+        const authors = [
+          ...new Set(prList.map((pr) => pr.author?.login).filter(Boolean)),
+        ].sort();
+        const branches = [
+          ...new Set(prList.map((pr) => pr.baseRefName).filter(Boolean)),
+        ].sort();
+        const approvers = [
+          ...new Set(
+            prList.flatMap(
+              (pr) =>
+                pr.reviews?.nodes
+                  ?.filter((r) => r.state === "APPROVED" && r.author?.login)
+                  .map((r) => r.author.login) || []
+            )
+          ),
+        ].sort();
+
+        populateDatalist(authorDatalist, authors);
+        populateDatalist(approverDatalist, approvers);
+        populateDatalist(branchDatalist, branches);
+      }
+
+      function populateDatalist(datalistElement, options) {
+        if (!datalistElement) return;
+        datalistElement.innerHTML = ""; // Clear existing options
+        options.forEach((optionValue) => {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          datalistElement.appendChild(option);
+        });
+      }
+
+      // --- Get Current Filters from UI ---
+      function getCurrentFilters() {
+        // Parse dates, ensuring end date includes the whole day
+        let startDate = null;
+        let endDate = null;
+        try {
+          if (startDateInput.value) {
+            // Parse as YYYY-MM-DD and set time to start of day UTC to avoid timezone issues
+            const [year, month, day] = startDateInput.value
+              .split("-")
+              .map(Number);
+            startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+            if (isNaN(startDate.getTime())) startDate = null;
+          }
+          if (endDateInput.value) {
+            // Parse as YYYY-MM-DD and set time to *end* of day UTC
+            const [year, month, day] = endDateInput.value
+              .split("-")
+              .map(Number);
+            endDate = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+            // Make end date exclusive for filtering >= endDate by adding 1ms
+            endDate.setUTCMilliseconds(endDate.getUTCMilliseconds() + 1);
+            if (isNaN(endDate.getTime())) endDate = null;
+          }
+        } catch (e) {
+          console.error("Error parsing dates:", e);
+          startDate = null;
+          endDate = null;
+        }
+
+        return {
+          startDate: startDate,
+          endDate: endDate,
+          author: authorInput.value.trim() || null,
+          approver: approverInput.value.trim() || null,
+          targetBranch: targetBranchInput.value.trim() || null,
+          status: statusInput.value || null, // Use null if "Todos" is selected
+          excludeAuthor: excludeAuthorInput.value.trim() || null,
+          excludeBranchPattern: excludeBranchInput.value.trim() || null,
+        };
+      }
+
+      // --- Initial Setup Functions ---
+      function setDefaultDateRange() {
+        // Use date-fns if available
+        if (
+          typeof dateFns !== "undefined" &&
+          dateFns.format &&
+          dateFns.subDays
+        ) {
+          try {
+            const today = new Date();
+            const thirtyDaysAgo = dateFns.subDays(today, 30);
+            // Format YYYY-MM-DD is required for input type="date"
+            startDateInput.value = dateFns.format(thirtyDaysAgo, "yyyy-MM-dd");
+            endDateInput.value = dateFns.format(today, "yyyy-MM-dd");
+          } catch (e) {
+            console.error("Error setting default dates with date-fns:", e);
+            setDefaultDateRangeFallback(); // Fallback if date-fns fails
+          }
+        } else {
+          setDefaultDateRangeFallback(); // Fallback if date-fns not loaded
+        }
+      }
+      function setDefaultDateRangeFallback() {
+        try {
+          const today = new Date();
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(today.getDate() - 30);
+          // Format YYYY-MM-DD manually
+          const formatForInput = (date) => {
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
+            const dd = String(date.getDate()).padStart(2, "0");
+            return `${yyyy}-${mm}-${dd}`;
+          };
+          endDateInput.value = formatForInput(today);
+          startDateInput.value = formatForInput(thirtyDaysAgo);
+        } catch (e) {
+          console.error("Error setting default dates (fallback):", e);
+          // Leave inputs empty if fallback also fails
+          endDateInput.value = "";
+          startDateInput.value = "";
+        }
+      }
+      function setDefaultFilters() {
+        excludeAuthorInput.value = "dependabot"; // Example default exclusion
+        statusInput.value = "MERGED"; // Example default status
+        targetBranchInput.value = "main"; // Example default branch
+      }
+
+      // --- Event Listeners ---
+      filtersForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        refreshDashboard(); // Trigger refresh when filters are submitted
+      });
+
+      clearFiltersButton.addEventListener("click", () => {
+        filtersForm.reset();
+        setDefaultDateRange();
+        setDefaultFilters();
+        // Clear datalists? Maybe not necessary if refreshed on load.
+        refreshDashboard(); // Refresh with default filters
+      });
+
+      clearCacheButton.addEventListener("click", () => {
+        clearAllPrCache();
+        currentRawPrData = null; // Clear in-memory raw data too
+        currentFilteredPrData = null;
+        currentMetricsData = null;
+        alert("Cache local de dados de PRs foi limpo.");
+        // Optionally trigger a refresh after clearing cache
+        // refreshDashboard();
+      });
+
+      toggleDetailsButton.addEventListener("click", () => {
+        isDetailsVisible = !isDetailsVisible;
+        if (isDetailsVisible) {
+          toggleDetailsButton.textContent = "Ocultar Detalhes por PR";
+          detailsSectionContainer.style.display = "block";
+          ensureDetailsStructure(); // Make sure table structure exists
+
+          // Populate details table if data is available
+          if (currentFilteredPrData && currentMetricsData) {
+            console.log("Populating details from current filtered data.");
+            // Attach calculated metrics to each PR object for the table
+            const prMetricsMap = new Map();
+            currentMetricsData.timeInDraft?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                timeInDraft: m.hours,
+              })
+            );
+            currentMetricsData.timeToFirstReview?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                timeToFirstReview: m.hours,
+              })
+            );
+            currentMetricsData.reviewTime?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                reviewTime: m.hours,
+              })
+            );
+            currentMetricsData.mergeTime?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                mergeTime: m.hours,
+              })
+            );
+            currentMetricsData.prCycleTime?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                cycleTime: m.hours,
+              })
+            );
+            currentMetricsData.prSize?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                linesChanged: m.linesChanged,
+              })
+            );
+            currentMetricsData.reviewDepth?.forEach((m) =>
+              prMetricsMap.set(m.prNumber, {
+                ...(prMetricsMap.get(m.prNumber) || {}),
+                commentCount: m.commentCount,
+              })
+            );
+
+            const prListWithMetrics = currentFilteredPrData.map((pr) => ({
+              ...pr,
+              calculatedMetrics: prMetricsMap.get(pr.number) || {},
+            }));
+            populateTable(prListWithMetrics);
+          } else {
+            console.log(
+              "No current data to show details, table will be empty or show message."
+            );
+            if (detailsTableBody)
+              detailsTableBody.innerHTML = `<tr><td colspan="${
+                TOGGLEABLE_COLUMNS.length + 2
+              }">Aplique filtros e atualize para ver detalhes.</td></tr>`;
+          }
+        } else {
+          toggleDetailsButton.textContent = "Mostrar Detalhes por PR";
+          detailsSectionContainer.style.display = "none";
+        }
+      });
+
+      themeToggleButton.addEventListener("click", toggleTheme);
+
+      // --- Initial Load ---
+      document.addEventListener("DOMContentLoaded", () => {
+        if (
+          typeof dateFns === "undefined" ||
+          typeof dateFns.locale?.ptBR === "undefined"
+        ) {
+          console.warn("date-fns or pt-BR locale not loaded.");
+        }
+        loadThemePreference(); // Apply saved theme or default
+        setDefaultDateRange(); // Set default dates in inputs
+        setDefaultFilters(); // Set default filter values
+        // Don't fetch data automatically on load. Wait for user input.
+        console.log(
+          "Dashboard pronto. Insira a configuração do GitHub e clique em 'Atualizar Métricas'."
+        );
+        showError(
+          "Insira a configuração do GitHub e clique em 'Atualizar Métricas' para começar."
+        ); // Initial prompt
+      });
+    </script>
+  </body>
+</html>

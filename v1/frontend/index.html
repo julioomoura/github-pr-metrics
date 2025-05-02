@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub PR Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="[https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js](https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js)"></script>
+  </head>
+  <body>
+    <h1>Dashboard de Pull Requests do GitHub</h1>
+
+    <div class="filters">
+      <label for="startDate">Data Início:</label>
+      <input type="date" id="startDate" />
+
+      <label for="endDate">Data Fim:</label>
+      <input type="date" id="endDate" />
+
+      <label for="authorFilter">Autor:</label>
+      <input type="text" id="authorFilter" placeholder="Login do Autor" />
+
+      <label for="excludeAuthorFilter">Excluir Autor:</label>
+      <input
+        type="text"
+        id="excludeAuthorFilter"
+        placeholder="Login a excluir"
+      />
+
+      <label for="approverFilter">Aprovador:</label>
+      <input type="text" id="approverFilter" placeholder="Login do Aprovador" />
+
+      <label for="branchFilter">Branch Destino:</label>
+      <input type="text" id="branchFilter" placeholder="Nome da Branch" />
+
+      <label for="statusFilter">Status:</label>
+      <select id="statusFilter">
+        <option value="ALL">Todos</option>
+        <option value="OPEN">Aberto (Open)</option>
+        <option value="MERGED">Mesclado (Merged)</option>
+        <option value="CLOSED">Fechado (Closed)</option>
+        <option value="DRAFT">Rascunho (Draft)</option>
+      </select>
+
+      <button id="fetchButton">Buscar e Filtrar PRs</button>
+      <button id="clearFiltersButton">Limpar Filtros</button>
+    </div>
+
+    <div id="loading" style="display: none">Carregando dados...</div>
+    <div id="error" style="display: none; color: red"></div>
+
+    <div id="summary">
+      <h2>Resumo</h2>
+      <p>Total de PRs exibidos: <span id="totalPrsDisplayed">0</span></p>
+      <p>
+        Total de PRs no intervalo de datas:
+        <span id="totalPrsInDateRange">0</span>
+      </p>
+      <p>
+        Total de PRs buscados da API (antes das datas):
+        <span id="totalPrsFetched">0</span>
+      </p>
+      <h3>Métricas Agregadas (para PRs exibidos):</h3>
+      <div id="aggregateMetrics"></div>
+    </div>
+
+    <div id="chartsSection">
+      <h2>Visualização das Métricas</h2>
+      <div class="charts-grid">
+        <div class="chart-container">
+          <h3>Tempo para Primeira Revisão (Horas)</h3>
+          <canvas id="timeToFirstReviewChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Tempo em Draft (Dias)</h3>
+          <canvas id="timeInDraftChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Contribuições de Revisores (Aprovações)</h3>
+          <canvas id="reviewerContributionChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Tempo de Ciclo do PR (Dias)</h3>
+          <canvas id="cycleTimeChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Tempo de Revisão (Horas)</h3>
+          <canvas id="reviewTimeChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Tempo para Merge (Horas)</h3>
+          <canvas id="mergeTimeChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Tamanho do PR (Linhas Alteradas)</h3>
+          <canvas id="prSizeChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Contagem de Comentários por PR</h3>
+          <canvas id="commentCountChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div id="results">
+      <h2>Resultados Detalhados</h2>
+      <table id="prTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Título</th>
+            <th>Autor</th>
+            <th>Status</th>
+            <th>Branch Destino</th>
+            <th>Criado em</th>
+            <th>Atualizado em</th>
+            <th>Mergado em</th>
+            <th>Tempo Aberto (d)</th>
+            <th>Tam. (Linhas)</th>
+            <th>Aprovadores</th>
+            <th>Métricas Detalhadas</th>
+          </tr>
+        </thead>
+        <tbody id="prTableBody"></tbody>
+      </table>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

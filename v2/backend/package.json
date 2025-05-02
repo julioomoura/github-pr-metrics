@@ -1,0 +1,25 @@
+{
+    "name": "github-metrics-backend",
+    "version": "1.0.0",
+    "description": "Backend for GitHub PR Metrics Dashboard",
+    "main": "server.js",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "github",
+        "metrics",
+        "graphql",
+        "nodejs"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "dotenv": "^16.4.5"
+    },
+    "engines": {
+        "node": ">=22.0.0"
+    }
+}

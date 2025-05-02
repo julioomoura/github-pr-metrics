@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub PR Metrics Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.x/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns/locale/pt-BR@3.x/cdn.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Dashboard de Métricas de Pull Requests</h1>
+      <button id="theme-toggle-btn" class="theme-toggle" title="Alternar Tema">
+        🌙
+      </button>
+    </header>
+
+    <main>
+      <section class="filters-container card">
+        <h2>Filtros</h2>
+        <form id="filters-form">
+          <div class="filter-group">
+            <label for="date-range">Intervalo de Datas (Criação):</label>
+            <div class="date-inputs">
+              <input type="date" id="start-date" name="startDate" />
+              <span>até</span>
+              <input type="date" id="end-date" name="endDate" />
+            </div>
+          </div>
+          <div class="filter-group">
+            <label for="author">Autor:</label>
+            <input
+              type="text"
+              id="author"
+              name="author"
+              list="author-list"
+              placeholder="Login do autor"
+            />
+            <datalist id="author-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="approver">Aprovador:</label>
+            <input
+              type="text"
+              id="approver"
+              name="approver"
+              list="approver-list"
+              placeholder="Login do aprovador"
+            />
+            <datalist id="approver-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="target-branch">Branch Destino:</label>
+            <input
+              type="text"
+              id="target-branch"
+              name="targetBranch"
+              list="branch-list"
+              placeholder="Nome da branch"
+            />
+            <datalist id="branch-list"></datalist>
+          </div>
+          <div class="filter-group">
+            <label for="status">Status:</label>
+            <select id="status" name="status">
+              <option value="">Todos</option>
+              <option value="OPEN">Aberto (Open)</option>
+              <option value="MERGED">Mergeado (Merged)</option>
+              <option value="CLOSED">Fechado (Closed)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="exclude-author">Excluir Autor:</label>
+            <input
+              type="text"
+              id="exclude-author"
+              name="excludeAuthor"
+              list="author-list"
+              placeholder="Login do autor a excluir"
+            />
+          </div>
+          <div class="filter-group">
+            <label for="exclude-branch">Excluir Branch (Padrão):</label>
+            <input
+              type="text"
+              id="exclude-branch"
+              name="excludeBranchPattern"
+              placeholder="Ex: releases/**"
+            />
+          </div>
+
+          <div class="filter-actions">
+            <button type="submit">Atualizar Métricas</button>
+            <button type="button" id="clear-filters">Limpar Filtros</button>
+            <button type="button" id="force-refresh">
+              Forçar Atualização (GitHub)
+            </button>
+            <button type="button" id="toggle-details-btn" class="button-link">
+              Mostrar Detalhes por PR
+            </button>
+          </div>
+        </form>
+        <div id="loading-indicator" class="loading" style="display: none">
+          Carregando dados...
+        </div>
+        <div id="error-message" class="error" style="display: none"></div>
+      </section>
+
+      <section class="summary-container card">
+        <h2>Resumo <span id="summary-count">(...)</span></h2>
+        <div id="summary-details">
+          <p>Abertos: <span id="summary-open">?</span></p>
+          <p>Mergeados: <span id="summary-merged">?</span></p>
+          <p>Fechados (não mergeados): <span id="summary-closed">?</span></p>
+        </div>
+      </section>
+
+      <section class="charts-container">
+        <h2>Métricas Agregadas</h2>
+        <div class="chart-grid">
+          <div class="chart-card card">
+            <h3>Tempo Médio para Primeira Revisão (Horas)</h3>
+            <p class="average-value" id="avg-time-to-first-review">--</p>
+            <canvas id="time-to-first-review-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio em Draft (Horas)</h3>
+            <p class="average-value" id="avg-time-in-draft">--</p>
+            <canvas id="time-in-draft-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Contribuição por Aprovador (Nº de PRs Aprovados)</h3>
+            <canvas id="reviewer-contribution-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio de Ciclo do PR (Criação -> Merge) (Horas)</h3>
+            <p class="average-value" id="avg-pr-cycle-time">--</p>
+            <canvas id="pr-cycle-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>
+              Tempo Médio de Revisão (1ª Revisão -> Aprovação/Merge) (Horas)
+            </h3>
+            <p class="average-value" id="avg-review-time">--</p>
+            <canvas id="review-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tempo Médio de Merge (Aprovação -> Merge) (Horas)</h3>
+            <p class="average-value" id="avg-merge-time">--</p>
+            <canvas id="merge-time-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Tamanho Médio do PR (Linhas Alteradas)</h3>
+            <p class="average-value" id="avg-pr-size">--</p>
+            <canvas id="pr-size-chart"></canvas>
+          </div>
+          <div class="chart-card card">
+            <h3>Média de Comentários por PR</h3>
+            <p class="average-value" id="avg-review-depth">--</p>
+            <canvas id="review-depth-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="details-section-container" style="display: none"></section>
+    </main>
+
+    <footer>
+      <p>GitHub PR Metrics Dashboard</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
