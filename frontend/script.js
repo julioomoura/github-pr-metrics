@@ -42,33 +42,127 @@ let detailsTableHead = null;
 let detailsTableBody = null;
 let detailsLoadingIndicator = null;
 let detailsErrorMessageDiv = null;
-let columnTogglesContainer = null; // Will be selected inside ensureDetailsStructure
+let columnTogglesContainer = null;
+let detailsFilterInput = null; // Input for text filtering
 
 // --- Constants ---
 const LOCAL_STORAGE_KEY_THEME = "dashboardThemePreference";
 const LOCAL_STORAGE_KEY_COLUMNS = "prDetailsColumnVisibility";
 const TOGGLEABLE_COLUMNS = [
-  { index: 2, label: "Autor", defaultVisible: true },
-  { index: 3, label: "Status", defaultVisible: true },
-  { index: 4, label: "Criado em", defaultVisible: true },
-  { index: 5, label: "Branch Destino", defaultVisible: true },
-  { index: 6, label: "Aprovador(es)", defaultVisible: true },
-  { index: 7, label: "Tempo em Draft (h)", defaultVisible: true },
-  { index: 8, label: "Tempo 1ª Revisão (h)", defaultVisible: true },
-  { index: 9, label: "Tempo Revisão (h)", defaultVisible: true },
-  { index: 10, label: "Tempo Merge (h)", defaultVisible: true },
-  { index: 11, label: "Tempo Ciclo (h)", defaultVisible: true },
-  { index: 12, label: "Tam. (Linhas)", defaultVisible: true },
-  { index: 13, label: "Comentários", defaultVisible: true },
-  { index: 14, label: "Mergeado em", defaultVisible: true },
+  {
+    index: 2,
+    label: "Autor",
+    defaultVisible: true,
+    sortable: true,
+    type: "string",
+  },
+  {
+    index: 3,
+    label: "Status",
+    defaultVisible: true,
+    sortable: true,
+    type: "string",
+  },
+  {
+    index: 4,
+    label: "Criado em",
+    defaultVisible: true,
+    sortable: true,
+    type: "date",
+  },
+  {
+    index: 5,
+    label: "Branch Destino",
+    defaultVisible: true,
+    sortable: true,
+    type: "string",
+  },
+  {
+    index: 6,
+    label: "Aprovador(es)",
+    defaultVisible: true,
+    sortable: true,
+    type: "string",
+  },
+  {
+    index: 7,
+    label: "Tempo em Draft (h)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 8,
+    label: "Tempo 1ª Revisão (h)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 9,
+    label: "Tempo Revisão (h)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 10,
+    label: "Tempo Merge (h)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 11,
+    label: "Tempo Ciclo (h)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 12,
+    label: "Tam. (Linhas)",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 13,
+    label: "Comentários",
+    defaultVisible: true,
+    sortable: true,
+    type: "number",
+  },
+  {
+    index: 14,
+    label: "Mergeado em",
+    defaultVisible: true,
+    sortable: true,
+    type: "date",
+  },
 ];
+// Add non-toggleable but sortable columns
+const SORTABLE_COLUMNS_INFO = {
+  0: { type: "number" }, // PR Number
+  1: { type: "string" }, // Title
+  ...Object.fromEntries(
+    TOGGLEABLE_COLUMNS.filter((c) => c.sortable).map((c) => [
+      c.index,
+      { type: c.type },
+    ])
+  ),
+};
 
 // --- Chart Instances ---
 const chartInstances = {};
 
 // --- State ---
 let isDetailsVisible = false;
-let currentDashboardData = null;
+let currentDashboardData = null; // Holds { metrics: {}, prList: [] }
+let currentSortColumnIndex = 4; // Default sort by 'Criado em'
+let currentSortDirection = "desc"; // Default descending
+let currentFilteredPrList = null; // Holds the list currently displayed in the table (after filtering)
+
 let currentTheme = "light";
 
 // --- Utility Functions ---
@@ -347,8 +441,6 @@ function saveColumnVisibility(visibility) {
     console.error("Err save visibility:", e);
   }
 }
-
-/** Sets column visibility AND updates corresponding button state */
 function setColumnVisibility(columnIndex, isVisible) {
   if (!detailsTable) return;
   const cells = detailsTable.querySelectorAll(
@@ -357,8 +449,6 @@ function setColumnVisibility(columnIndex, isVisible) {
   cells.forEach((cell) => {
     cell.classList.toggle("column-hidden", !isVisible);
   });
-
-  // Update button state if the toggle container exists
   if (columnTogglesContainer) {
     const button = columnTogglesContainer.querySelector(
       `button[data-column-index="${columnIndex}"]`
@@ -368,51 +458,250 @@ function setColumnVisibility(columnIndex, isVisible) {
     }
   }
 }
-
-/** Creates column toggle BUTTONS */
 function createColumnToggles(initialVisibility) {
   if (!columnTogglesContainer) return;
-  columnTogglesContainer.innerHTML = ""; // Clear existing toggles
-
+  columnTogglesContainer.innerHTML = "";
   TOGGLEABLE_COLUMNS.forEach((col) => {
     const isVisible = initialVisibility[col.index] ?? col.defaultVisible;
-
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "toggle-button"; // Base class
+    button.className = "toggle-button";
     button.dataset.columnIndex = col.index;
     button.textContent = col.label;
-    button.classList.toggle("active", isVisible); // Set initial active state
-
-    // Add event listener to handle clicks
+    button.classList.toggle("active", isVisible);
     button.addEventListener("click", (event) => {
       const btn = event.target;
       const index = parseInt(btn.dataset.columnIndex, 10);
       const currentVisibility = loadColumnVisibility();
-      const newVisibility = !(currentVisibility[index] ?? col.defaultVisible); // Toggle state
-
-      setColumnVisibility(index, newVisibility); // Apply visibility to table and button
-      currentVisibility[index] = newVisibility; // Update state object
-      saveColumnVisibility(currentVisibility); // Save updated state
+      const newVisibility = !(currentVisibility[index] ?? col.defaultVisible);
+      setColumnVisibility(index, newVisibility);
+      currentVisibility[index] = newVisibility;
+      saveColumnVisibility(currentVisibility);
     });
-
     columnTogglesContainer.appendChild(button);
-
-    // Initial application of visibility to the table column (redundant if called after populateTable)
-    // setColumnVisibility(col.index, isVisible);
   });
+}
+
+// --- Details Table Sorting and Filtering ---
+
+/** Sorts the PR list data based on a column */
+function sortPrList(columnIndex, direction) {
+  if (!currentDashboardData?.prList || !SORTABLE_COLUMNS_INFO[columnIndex]) {
+    console.warn("Cannot sort: Invalid column index or data missing.");
+    return; // Cannot sort if data or column info is missing
+  }
+
+  const { type } = SORTABLE_COLUMNS_INFO[columnIndex];
+  const sortMultiplier = direction === "asc" ? 1 : -1;
+
+  // Sort the *original* full list from the dashboard data
+  currentDashboardData.prList.sort((a, b) => {
+    let valA, valB;
+
+    // Extract values based on column index
+    // This needs to map columnIndex to the actual data property
+    switch (columnIndex) {
+      case 0:
+        valA = a.number;
+        valB = b.number;
+        break;
+      case 1:
+        valA = a.title?.toLowerCase();
+        valB = b.title?.toLowerCase();
+        break;
+      case 2:
+        valA = a.author?.login?.toLowerCase();
+        valB = b.author?.login?.toLowerCase();
+        break;
+      case 3:
+        valA = a.state?.toLowerCase();
+        valB = b.state?.toLowerCase();
+        break;
+      case 4:
+        valA = a.createdAt;
+        valB = b.createdAt;
+        break;
+      case 5:
+        valA = a.baseRefName?.toLowerCase();
+        valB = b.baseRefName?.toLowerCase();
+        break;
+      case 6: // Approvers (complex, sort by first approver for simplicity)
+        const approversA = [
+          ...new Set(
+            (a.reviews?.nodes || [])
+              .filter((r) => r.state === "APPROVED" && r.author?.login)
+              .map((r) => r.author.login)
+          ),
+        ];
+        const approversB = [
+          ...new Set(
+            (b.reviews?.nodes || [])
+              .filter((r) => r.state === "APPROVED" && r.author?.login)
+              .map((r) => r.author.login)
+          ),
+        ];
+        valA = approversA[0]?.toLowerCase();
+        valB = approversB[0]?.toLowerCase();
+        break;
+      // --- Metrics --- (Need to access calculatedMetrics attached in updateDashboardAndCharts)
+      case 7:
+        valA = a.calculatedMetrics?.timeInDraft;
+        valB = b.calculatedMetrics?.timeInDraft;
+        break;
+      case 8:
+        valA = a.calculatedMetrics?.timeToFirstReview;
+        valB = b.calculatedMetrics?.timeToFirstReview;
+        break;
+      case 9:
+        valA = a.calculatedMetrics?.reviewTime;
+        valB = b.calculatedMetrics?.reviewTime;
+        break;
+      case 10:
+        valA = a.calculatedMetrics?.mergeTime;
+        valB = b.calculatedMetrics?.mergeTime;
+        break;
+      case 11:
+        valA = a.calculatedMetrics?.cycleTime;
+        valB = b.calculatedMetrics?.cycleTime;
+        break;
+      case 12:
+        valA = a.calculatedMetrics?.linesChanged;
+        valB = b.calculatedMetrics?.linesChanged;
+        break;
+      case 13:
+        valA = a.calculatedMetrics?.commentCount;
+        valB = b.calculatedMetrics?.commentCount;
+        break;
+      case 14:
+        valA = a.mergedAt;
+        valB = b.mergedAt;
+        break;
+      default:
+        return 0; // Unknown column
+    }
+
+    // Handle null/undefined values (push them to the end)
+    if (valA == null && valB == null) return 0;
+    if (valA == null) return 1 * sortMultiplier; // a is null, comes after b
+    if (valB == null) return -1 * sortMultiplier; // b is null, comes after a
+
+    // Compare based on type
+    if (type === "number") {
+      return (valA - valB) * sortMultiplier;
+    } else if (type === "date") {
+      // Ensure dates are comparable
+      const dateA = new Date(valA);
+      const dateB = new Date(valB);
+      if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
+      if (isNaN(dateA.getTime())) return 1 * sortMultiplier;
+      if (isNaN(dateB.getTime())) return -1 * sortMultiplier;
+      return (dateA - dateB) * sortMultiplier;
+    } else {
+      // Default to string comparison
+      return String(valA).localeCompare(String(valB)) * sortMultiplier;
+    }
+  });
+
+  // Update state
+  currentSortColumnIndex = columnIndex;
+  currentSortDirection = direction;
+
+  // Re-apply text filter and re-populate table
+  applyTextFilterAndRepopulate();
+  updateSortIcons(); // Update visual indicators
+}
+
+/** Updates sort icons in table headers */
+function updateSortIcons() {
+  if (!detailsTableHead) return;
+  detailsTableHead.querySelectorAll("th[data-column-index]").forEach((th) => {
+    const iconSpan = th.querySelector(".sort-icon");
+    if (!iconSpan) return; // Skip if icon span doesn't exist
+
+    const colIndex = parseInt(th.dataset.columnIndex, 10);
+    th.classList.remove("sorted", "asc", "desc");
+    iconSpan.textContent = "↕"; // Default icon (up/down arrow)
+
+    if (colIndex === currentSortColumnIndex) {
+      th.classList.add("sorted", currentSortDirection);
+      iconSpan.textContent = currentSortDirection === "asc" ? "▲" : "▼"; // Up or Down arrow
+    }
+  });
+}
+
+/** Handles click on a table header for sorting */
+function handleSortClick(event) {
+  const header = event.target.closest("th[data-column-index]");
+  if (!header) return; // Click wasn't on a sortable header
+
+  const columnIndex = parseInt(header.dataset.columnIndex, 10);
+  if (isNaN(columnIndex) || !SORTABLE_COLUMNS_INFO[columnIndex]) return; // Not a sortable column
+
+  let newDirection = "asc";
+  if (
+    columnIndex === currentSortColumnIndex &&
+    currentSortDirection === "asc"
+  ) {
+    newDirection = "desc"; // Toggle direction if same column clicked
+  }
+
+  sortPrList(columnIndex, newDirection);
+}
+
+/** Filters the currently displayed PR list based on text input */
+function applyTextFilter(filterText) {
+  if (!detailsTableBody) return;
+  const text = filterText.toLowerCase().trim();
+
+  Array.from(detailsTableBody.rows).forEach((row) => {
+    // Check if row contains data (skip placeholder rows)
+    if (row.cells.length <= 1 && row.cells[0]?.colSpan > 1) {
+      row.classList.remove("hidden-row"); // Ensure placeholder rows are not hidden by filter
+      return;
+    }
+
+    // Get text content from relevant cells (e.g., number, title, author, approvers)
+    const prNumber = row.cells[0]?.textContent.toLowerCase() || "";
+    const title = row.cells[1]?.textContent.toLowerCase() || "";
+    const author = row.cells[2]?.textContent.toLowerCase() || "";
+    const approvers = row.cells[6]?.textContent.toLowerCase() || ""; // Index for approvers
+
+    const rowVisible =
+      prNumber.includes(text) ||
+      title.includes(text) ||
+      author.includes(text) ||
+      approvers.includes(text);
+
+    row.classList.toggle("hidden-row", !rowVisible);
+  });
+}
+
+/** Re-applies the current text filter and re-populates the table */
+function applyTextFilterAndRepopulate() {
+  if (!currentDashboardData?.prList) return;
+
+  // Repopulate the table with the *sorted* full list
+  populateTable(currentDashboardData.prList);
+
+  // Re-apply the text filter based on the input field's current value
+  if (detailsFilterInput) {
+    applyTextFilter(detailsFilterInput.value);
+  }
 }
 
 // --- Details Table Population ---
 function populateTable(prList) {
   if (!detailsTableBody || !detailsTableHead) return;
-  detailsTableBody.innerHTML = "";
+  detailsTableBody.innerHTML = ""; // Clear previous rows
+
   const numCols =
     detailsTableHead.rows[0]?.cells.length || TOGGLEABLE_COLUMNS.length + 2;
+
   if (!prList || prList.length === 0) {
     detailsTableBody.innerHTML = `<tr><td colspan="${numCols}">Nenhum PR encontrado.</td></tr>`;
     return;
   }
+
   prList.forEach((pr) => {
     const row = detailsTableBody.insertRow();
     const mets = pr.calculatedMetrics || {};
@@ -459,15 +748,20 @@ function populateTable(prList) {
     addCell(mets.commentCount ?? "--", 13);
     addCell(formatDate(pr.mergedAt), 14);
   });
+
+  // Apply column visibility *after* populating
   const curVis = loadColumnVisibility();
   TOGGLEABLE_COLUMNS.forEach((col) => {
     setColumnVisibility(col.index, curVis[col.index] ?? col.defaultVisible);
   });
   setColumnVisibility(0, true);
   setColumnVisibility(1, true);
+  updateSortIcons(); // Ensure sort icons are correct after repopulating
 }
+
 function ensureDetailsStructure() {
   if (detailsSectionContainer.querySelector("#pr-details-table")) {
+    // Structure already exists, ensure references are set
     detailsTable = document.getElementById("pr-details-table");
     detailsTableHead = detailsTable?.querySelector("thead");
     detailsTableBody = document.getElementById("pr-details-tbody");
@@ -478,9 +772,63 @@ function ensureDetailsStructure() {
     columnTogglesContainer = detailsSectionContainer.querySelector(
       ".column-toggles .toggle-grid"
     );
+    detailsFilterInput = document.getElementById("details-filter-input"); // Get filter input ref
+    // Re-add header listener if structure was rebuilt
+    if (detailsTableHead && !detailsTableHead.dataset.listenerAdded) {
+      detailsTableHead.addEventListener("click", handleSortClick);
+      detailsTableHead.dataset.listenerAdded = "true"; // Mark as added
+    }
+    // Re-add filter listener if structure was rebuilt
+    if (detailsFilterInput && !detailsFilterInput.dataset.listenerAdded) {
+      detailsFilterInput.addEventListener("input", () =>
+        applyTextFilter(detailsFilterInput.value)
+      );
+      detailsFilterInput.dataset.listenerAdded = "true"; // Mark as added
+    }
     return;
   }
-  detailsSectionContainer.innerHTML = `<div class="details-container card"><h2>Detalhes por Pull Request</h2><div class="column-toggles card"><h3>Exibir Colunas:</h3><div class="toggle-grid"></div></div><div id="loading-indicator-details" class="loading" style="display: none;">...</div><div id="error-message-details" class="error" style="display: none;"></div><div class="table-wrapper"><table id="pr-details-table"><thead><tr><th data-column-index="0"># PR</th><th data-column-index="1">Título</th><th data-column-index="2">Autor</th><th data-column-index="3">Status</th><th data-column-index="4">Criado em</th><th data-column-index="5">Branch Destino</th><th data-column-index="6">Aprovador(es)</th><th data-column-index="7">Tempo em Draft (h)</th><th data-column-index="8">Tempo 1ª Revisão (h)</th><th data-column-index="9">Tempo Revisão (h)</th><th data-column-index="10">Tempo Merge (h)</th><th data-column-index="11">Tempo Ciclo (h)</th><th data-column-index="12">Tam. (Linhas)</th><th data-column-index="13">Comentários</th><th data-column-index="14">Mergeado em</th></tr></thead><tbody id="pr-details-tbody"></tbody></table></div></div>`;
+
+  // Structure doesn't exist, create it
+  detailsSectionContainer.innerHTML = `
+        <div class="details-container card">
+            <h2>Detalhes por Pull Request</h2>
+            <div class="column-toggles card">
+                <h3>Exibir Colunas:</h3>
+                <div class="toggle-grid"></div>
+            </div>
+            <div class="details-filter">
+                 <label for="details-filter-input">Filtrar Tabela:</label>
+                 <input type="text" id="details-filter-input" placeholder="Filtrar por nº, título, autor, aprovador...">
+            </div>
+            <div id="loading-indicator-details" class="loading" style="display: none;">Carregando detalhes...</div>
+            <div id="error-message-details" class="error" style="display: none;"></div>
+            <div class="table-wrapper">
+                 <table id="pr-details-table">
+                    <thead>
+                        <tr>
+                            <th data-column-index="0"># PR<span class="sort-icon"></span></th>
+                            <th data-column-index="1">Título<span class="sort-icon"></span></th>
+                            <th data-column-index="2">Autor<span class="sort-icon"></span></th>
+                            <th data-column-index="3">Status<span class="sort-icon"></span></th>
+                            <th data-column-index="4">Criado em<span class="sort-icon"></span></th>
+                            <th data-column-index="5">Branch Destino<span class="sort-icon"></span></th>
+                            <th data-column-index="6">Aprovador(es)<span class="sort-icon"></span></th>
+                            <th data-column-index="7">Tempo em Draft (h)<span class="sort-icon"></span></th>
+                            <th data-column-index="8">Tempo 1ª Revisão (h)<span class="sort-icon"></span></th>
+                            <th data-column-index="9">Tempo Revisão (h)<span class="sort-icon"></span></th>
+                            <th data-column-index="10">Tempo Merge (h)<span class="sort-icon"></span></th>
+                            <th data-column-index="11">Tempo Ciclo (h)<span class="sort-icon"></span></th>
+                            <th data-column-index="12">Tam. (Linhas)<span class="sort-icon"></span></th>
+                            <th data-column-index="13">Comentários<span class="sort-icon"></span></th>
+                            <th data-column-index="14">Mergeado em<span class="sort-icon"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pr-details-tbody"></tbody>
+                </table>
+            </div>
+        </div>`;
+
+  // Now get references to the newly created elements
   detailsTable = document.getElementById("pr-details-table");
   detailsTableHead = detailsTable?.querySelector("thead");
   detailsTableBody = document.getElementById("pr-details-tbody");
@@ -491,6 +839,21 @@ function ensureDetailsStructure() {
   columnTogglesContainer = detailsSectionContainer.querySelector(
     ".column-toggles .toggle-grid"
   );
+  detailsFilterInput = document.getElementById("details-filter-input"); // Get filter input ref
+
+  // Add listeners to the new elements
+  if (detailsTableHead) {
+    detailsTableHead.addEventListener("click", handleSortClick);
+    detailsTableHead.dataset.listenerAdded = "true"; // Mark as added
+  }
+  if (detailsFilterInput) {
+    detailsFilterInput.addEventListener("input", () =>
+      applyTextFilter(detailsFilterInput.value)
+    );
+    detailsFilterInput.dataset.listenerAdded = "true"; // Mark as added
+  }
+
+  // Create column toggles
   const initVis = loadColumnVisibility();
   createColumnToggles(initVis);
 }
@@ -667,6 +1030,7 @@ function updateDashboardAndCharts(responseData) {
     }));
     ensureDetailsStructure();
     populateTable(prListWithMetrics);
+    applyTextFilterAndRepopulate();
   }
   if (metricsData.errors && metricsData.errors.length > 0) {
     const errorMsg = `Avisos no cálculo: ${metricsData.errors.length} PR(s). Ver console.`;
@@ -791,14 +1155,17 @@ forceRefreshButton.addEventListener("click", () => {
   currentDashboardData = null;
   fetchDashboardData(true);
 });
+
 toggleDetailsButton.addEventListener("click", () => {
   isDetailsVisible = !isDetailsVisible;
   if (isDetailsVisible) {
     toggleDetailsButton.textContent = "Ocultar Detalhes por PR";
     detailsSectionContainer.style.display = "block";
-    ensureDetailsStructure();
+    ensureDetailsStructure(); // Create HTML if needed
+    // Populate with current data if available, otherwise fetch
     if (currentDashboardData) {
       console.log("Populating details from cached data.");
+      // Attach metrics to PR list for sorting/display
       const prMetricsMap = new Map();
       currentDashboardData.metrics.timeInDraft?.forEach((m) =>
         prMetricsMap.set(m.prNumber, {
@@ -842,11 +1209,13 @@ toggleDetailsButton.addEventListener("click", () => {
           commentCount: m.commentCount,
         })
       );
-      const prListWithMetrics = currentDashboardData.prList.map((pr) => ({
-        ...pr,
-        calculatedMetrics: prMetricsMap.get(pr.number) || {},
-      }));
-      populateTable(prListWithMetrics);
+      currentDashboardData.prList.forEach((pr) => {
+        // Ensure calculatedMetrics exists
+        pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
+      });
+
+      sortPrList(currentSortColumnIndex, currentSortDirection); // Apply current sort
+      // populateTable(currentDashboardData.prList); // populateTable is called by applyTextFilterAndRepopulate inside sortPrList
     } else {
       console.log("No cached data, fetching details...");
       fetchDashboardData(false);
@@ -856,6 +1225,7 @@ toggleDetailsButton.addEventListener("click", () => {
     detailsSectionContainer.style.display = "none";
   }
 });
+
 themeToggleButton.addEventListener("click", toggleTheme);
 
 // --- Initial Load ---
