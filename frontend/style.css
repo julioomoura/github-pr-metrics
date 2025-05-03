@@ -83,7 +83,7 @@ body.dark-mode {
   --toggle-button-active-hover-bg: var(--accent-color-hover);
 }
 
-/* Apply base styles using variables */
+/* Base styles */
 body {
   font-family: var(--font-family);
   margin: 0;
@@ -150,10 +150,10 @@ main {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-/* --- Filters --- */
+/* Filters */
 .filters-container h2,
 .summary-container h2,
-.charts-container h2,
+.charts-container .section-title,
 .details-container h2 {
   margin-top: 0;
   border-bottom: 1px solid var(--border-color);
@@ -270,7 +270,7 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   color: #ffffff;
 }
 
-/* --- Summary --- */
+/* Summary */
 .summary-container {
   text-align: center;
 }
@@ -291,7 +291,21 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   color: var(--accent-color);
 }
 
-/* --- Charts --- */
+/* Charts */
+.charts-container .section-title {
+  margin-bottom: 1.5rem;
+}
+.chart-category {
+  margin-bottom: 2rem;
+}
+.chart-category .category-title {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px dashed var(--border-color);
+}
 .charts-container .chart-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -316,6 +330,7 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   max-width: 100%;
   height: auto;
   max-height: 280px;
+  margin-top: 0.5rem;
 }
 .average-value {
   text-align: center;
@@ -324,8 +339,12 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   color: var(--accent-color);
   margin-bottom: 1rem;
 }
+/* Optional: Style for full-width chart card */
+.chart-card-full {
+  grid-column: 1 / -1; /* Make card span all columns */
+}
 
-/* --- Details Section Styles --- */
+/* Details Section */
 #details-section-container {
   margin-top: 1.5rem;
 }
@@ -338,8 +357,6 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   box-shadow: none;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
-
-/* Column Toggles */
 .column-toggles {
   margin-bottom: 1rem;
   padding: 1rem;
@@ -406,8 +423,8 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   color: var(--text-primary);
   border-radius: var(--border-radius);
   font-size: 0.9em;
-  flex-grow: 1; /* Allow input to take available space */
-  max-width: 400px; /* Limit max width */
+  flex-grow: 1;
+  max-width: 400px;
   outline: none;
 }
 #details-filter-input:focus {
@@ -447,8 +464,6 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   white-space: normal;
   min-width: 200px;
 }
-
-/* Sticky Header Row Styles & Sorting Indicators */
 #pr-details-table thead th {
   background-color: var(--table-header-bg);
   font-weight: 600;
@@ -456,39 +471,31 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   top: 0;
   z-index: 2;
   border-bottom: 2px solid var(--border-color);
-  cursor: pointer; /* Indicate clickable for sorting */
+  cursor: pointer;
   user-select: none;
 }
 #pr-details-table thead th .sort-icon {
-  /* Style for the sort icon span */
   display: inline-block;
   margin-left: 0.4em;
   font-size: 0.8em;
   color: var(--text-secondary);
-  opacity: 0.5; /* Dim inactive icons */
-  width: 1em; /* Reserve space */
+  opacity: 0.5;
+  width: 1em;
   text-align: center;
 }
 #pr-details-table thead th.sorted .sort-icon {
-  opacity: 1; /* Full opacity for active sort icon */
-  color: var(--accent-color); /* Highlight active sort icon */
+  opacity: 1;
+  color: var(--accent-color);
 }
-
-/* Apply even row background */
 #pr-details-table tbody tr:nth-child(even) td {
   background-color: var(--table-row-even-bg);
 }
-
-/* Apply hover effect */
 #pr-details-table tbody tr:hover td {
   background-color: var(--table-row-hover-bg);
 }
-
-/* Style for hidden rows (used by text filter) */
 #pr-details-table tbody tr.hidden-row {
   display: none;
 }
-
 #pr-details-table td a {
   color: var(--text-link);
   text-decoration: none;
@@ -501,7 +508,7 @@ body.dark-mode .filter-actions button[type="submit"]:hover {
   display: none;
 }
 
-/* --- Common Styles --- */
+/* Common Styles */
 .loading {
   text-align: center;
   padding: 1rem;
@@ -526,7 +533,7 @@ footer {
   border-top: 1px solid var(--border-color);
 }
 
-/* --- Responsive adjustments --- */
+/* Responsive adjustments */
 @media (max-width: 768px) {
   header {
     padding: 0.8rem 1rem;
@@ -562,5 +569,15 @@ footer {
   .details-filter {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+@media (min-width: 768px) and (max-width: 1199px) {
+  .chart-category .chart-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1200px) {
+  .chart-category .chart-grid {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   }
 }

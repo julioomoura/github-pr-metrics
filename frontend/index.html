@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@3.x/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns/locale/pt-BR@3.x/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   </head>
   <body>
     <header>
@@ -118,48 +119,78 @@
       </section>
 
       <section class="charts-container">
-        <h2>Métricas Agregadas</h2>
-        <div class="chart-grid">
-          <div class="chart-card card">
-            <h3>Tempo Médio para Primeira Revisão (Horas)</h3>
-            <p class="average-value" id="avg-time-to-first-review">--</p>
-            <canvas id="time-to-first-review-chart"></canvas>
+        <h2 class="section-title">Métricas Agregadas</h2>
+
+        <div class="chart-category">
+          <h3 class="category-title">Fluxo de Trabalho & Volume</h3>
+          <div class="chart-grid">
+            <div class="chart-card card">
+              <h3>Volume de Pull Requests por Período</h3>
+              <canvas id="pr-volume-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Contribuição por Aprovador (Nº de PRs Aprovados)</h3>
+              <canvas id="reviewer-contribution-chart"></canvas>
+            </div>
           </div>
-          <div class="chart-card card">
-            <h3>Tempo Médio em Draft (Horas)</h3>
-            <p class="average-value" id="avg-time-in-draft">--</p>
-            <canvas id="time-in-draft-chart"></canvas>
+        </div>
+
+        <div class="chart-category">
+          <h3 class="category-title">
+            Eficiência da Revisão (Médias por Período)
+          </h3>
+          <div class="chart-grid">
+            <div class="chart-card card chart-card-full">
+              <h3>Tempos Médios de Revisão e Merge</h3>
+              <canvas id="review-efficiency-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Tempo Médio para Primeira Revisão (Distribuição)</h3>
+              <p class="average-value" id="avg-time-to-first-review">--</p>
+              <canvas id="time-to-first-review-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Tempo Médio em Draft (Distribuição)</h3>
+              <p class="average-value" id="avg-time-in-draft">--</p>
+              <canvas id="time-in-draft-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Tempo Médio de Merge (Pós-Aprovação) (Distribuição)</h3>
+              <p class="average-value" id="avg-merge-time">--</p>
+              <canvas id="merge-time-chart"></canvas>
+            </div>
           </div>
-          <div class="chart-card card">
-            <h3>Contribuição por Aprovador (Nº de PRs Aprovados)</h3>
-            <canvas id="reviewer-contribution-chart"></canvas>
+        </div>
+
+        <div class="chart-category">
+          <h3 class="category-title">Tempos de Ciclo (Distribuição)</h3>
+          <div class="chart-grid">
+            <div class="chart-card card">
+              <h3>Tempo de Ciclo do PR (Criação -> Merge) (Horas)</h3>
+              <p class="average-value" id="avg-pr-cycle-time">--</p>
+              <canvas id="pr-cycle-time-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Tempo de Revisão (1ª Revisão -> Aprovação/Merge) (Horas)</h3>
+              <p class="average-value" id="avg-review-time">--</p>
+              <canvas id="review-time-chart"></canvas>
+            </div>
           </div>
-          <div class="chart-card card">
-            <h3>Tempo Médio de Ciclo do PR (Criação -> Merge) (Horas)</h3>
-            <p class="average-value" id="avg-pr-cycle-time">--</p>
-            <canvas id="pr-cycle-time-chart"></canvas>
-          </div>
-          <div class="chart-card card">
-            <h3>
-              Tempo Médio de Revisão (1ª Revisão -> Aprovação/Merge) (Horas)
-            </h3>
-            <p class="average-value" id="avg-review-time">--</p>
-            <canvas id="review-time-chart"></canvas>
-          </div>
-          <div class="chart-card card">
-            <h3>Tempo Médio de Merge (Aprovação -> Merge) (Horas)</h3>
-            <p class="average-value" id="avg-merge-time">--</p>
-            <canvas id="merge-time-chart"></canvas>
-          </div>
-          <div class="chart-card card">
-            <h3>Tamanho Médio do PR (Linhas Alteradas)</h3>
-            <p class="average-value" id="avg-pr-size">--</p>
-            <canvas id="pr-size-chart"></canvas>
-          </div>
-          <div class="chart-card card">
-            <h3>Média de Comentários por PR</h3>
-            <p class="average-value" id="avg-review-depth">--</p>
-            <canvas id="review-depth-chart"></canvas>
+        </div>
+
+        <div class="chart-category">
+          <h3 class="category-title">Características do PR (Distribuição)</h3>
+          <div class="chart-grid">
+            <div class="chart-card card">
+              <h3>Tamanho do PR (Linhas Alteradas)</h3>
+              <p class="average-value" id="avg-pr-size">--</p>
+              <canvas id="pr-size-chart"></canvas>
+            </div>
+            <div class="chart-card card">
+              <h3>Comentários por PR</h3>
+              <p class="average-value" id="avg-review-depth">--</p>
+              <canvas id="review-depth-chart"></canvas>
+            </div>
           </div>
         </div>
       </section>

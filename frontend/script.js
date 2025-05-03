@@ -43,7 +43,7 @@ let detailsTableBody = null;
 let detailsLoadingIndicator = null;
 let detailsErrorMessageDiv = null;
 let columnTogglesContainer = null;
-let detailsFilterInput = null; // Input for text filtering
+let detailsFilterInput = null;
 
 // --- Constants ---
 const LOCAL_STORAGE_KEY_THEME = "dashboardThemePreference";
@@ -141,10 +141,9 @@ const TOGGLEABLE_COLUMNS = [
     type: "date",
   },
 ];
-// Add non-toggleable but sortable columns
 const SORTABLE_COLUMNS_INFO = {
-  0: { type: "number" }, // PR Number
-  1: { type: "string" }, // Title
+  0: { type: "number" },
+  1: { type: "string" },
   ...Object.fromEntries(
     TOGGLEABLE_COLUMNS.filter((c) => c.sortable).map((c) => [
       c.index,
@@ -152,17 +151,16 @@ const SORTABLE_COLUMNS_INFO = {
     ])
   ),
 };
+const DEFAULT_HISTOGRAM_BINS = 10;
 
 // --- Chart Instances ---
 const chartInstances = {};
 
 // --- State ---
 let isDetailsVisible = false;
-let currentDashboardData = null; // Holds { metrics: {}, prList: [] }
-let currentSortColumnIndex = 4; // Default sort by 'Criado em'
-let currentSortDirection = "desc"; // Default descending
-let currentFilteredPrList = null; // Holds the list currently displayed in the table (after filtering)
-
+let currentDashboardData = null;
+let currentSortColumnIndex = 4;
+let currentSortDirection = "desc";
 let currentTheme = "light";
 
 // --- Utility Functions ---
@@ -184,14 +182,26 @@ function formatDate(dateInput) {
   try {
     const d = new Date(dateInput);
     if (isNaN(d.getTime())) return "--";
-    if (typeof dateFns !== "undefined" && dateFns.locale?.ptBR) {
+    if (
+      typeof dateFns !== "undefined" &&
+      dateFns.format &&
+      dateFns.locale?.ptBR
+    ) {
       return dateFns.format(d, "P p", { locale: dateFns.locale.ptBR });
+    } else if (typeof dateFns !== "undefined" && dateFns.format) {
+      console.warn("date-fns pt-BR locale not found, using default format.");
+      return dateFns.format(d, "yyyy-MM-dd HH:mm");
     } else {
+      console.warn("date-fns not found, using browser default locale string.");
       return d.toLocaleString("pt-BR");
     }
   } catch (e) {
-    console.error("Err fmt date:", e);
-    return "--";
+    console.error("Error formatting date:", e);
+    try {
+      return new Date(dateInput).toLocaleDateString();
+    } catch {
+      return "--";
+    }
   }
 }
 function formatHours(hours, precision = 1) {
@@ -283,6 +293,8 @@ function updateChartDefaults(theme) {
 }
 
 // --- Chart Rendering ---
+
+/** Renders Bar Chart */
 function renderBarChart(
   chartId,
   labels,
@@ -301,6 +313,7 @@ function renderBarChart(
   const accentColorBg = isDark
     ? "rgba(88, 166, 255, 0.6)"
     : "rgba(0, 122, 204, 0.6)";
+
   chartInstances[chartId] = new Chart(ctx, {
     type: "bar",
     data: {
@@ -332,11 +345,13 @@ function renderBarChart(
     },
   });
 }
+
+/** Renders Histogram Chart */
 function renderHistogramChart(
   chartId,
   dataPoints,
   label,
-  numBins = 10,
+  numBins = DEFAULT_HISTOGRAM_BINS,
   xAxisLabel = "Valor",
   yAxisLabel = "Frequência"
 ) {
@@ -391,7 +406,89 @@ function renderHistogramChart(
       bins[binIndex]++;
     }
   });
-  renderBarChart(chartId, labels, bins, label, xAxisLabel, yAxisLabel);
+  renderBarChart(chartId, labels, bins, label, xAxisLabel, yAxisLabel); // Uses themed bar chart render
+}
+
+/** Renders a Multi-Line Chart */
+function renderMultiLineChart(
+  chartId,
+  datasets,
+  xAxisLabel = "Data",
+  yAxisLabel = "Contagem",
+  timeUnit = "day"
+) {
+  destroyChart(chartId);
+  const canvas = document.getElementById(chartId);
+  if (!canvas) {
+    console.error(`Canvas element with ID ${chartId} not found.`);
+    return;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const chartDatasets = datasets.map((ds) => {
+    ds.data.sort((a, b) => a.x - b.x);
+    return {
+      label: ds.label,
+      data: ds.data,
+      borderColor: ds.color,
+      backgroundColor: ds.color.replace(")", ", 0.1)").replace("rgb", "rgba"),
+      tension: 0.1,
+      pointRadius: 2,
+      pointHoverRadius: 4,
+      fill: true,
+    };
+  });
+
+  if (chartDatasets.every((ds) => ds.data.length === 0)) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = getComputedStyle(bodyElement)
+      .getPropertyValue("--text-secondary")
+      .trim();
+    ctx.fillText("Nenhum dado disponível", canvas.width / 2, canvas.height / 2);
+    return;
+  }
+
+  // Define adapter options only if locale is available
+  const adapterOptions =
+    typeof dateFns !== "undefined" && dateFns.locale?.ptBR
+      ? { date: { locale: dateFns.locale.ptBR } }
+      : {};
+
+  chartInstances[chartId] = new Chart(ctx, {
+    type: "line",
+    data: { datasets: chartDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        tooltip: { mode: "index", intersect: false },
+      },
+      scales: {
+        x: {
+          type: "time",
+          time: {
+            unit: timeUnit,
+            tooltipFormat: "P",
+            displayFormats: { [timeUnit]: "P" },
+          },
+          title: { display: !!xAxisLabel, text: xAxisLabel },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 10,
+            maxRotation: 45,
+            minRotation: 0,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: !!yAxisLabel, text: yAxisLabel },
+        },
+      },
+      adapters: adapterOptions,
+    },
+  });
 }
 
 // --- Column Toggle Functions ---
@@ -483,23 +580,14 @@ function createColumnToggles(initialVisibility) {
 }
 
 // --- Details Table Sorting and Filtering ---
-
-/** Sorts the PR list data based on a column */
 function sortPrList(columnIndex, direction) {
   if (!currentDashboardData?.prList || !SORTABLE_COLUMNS_INFO[columnIndex]) {
-    console.warn("Cannot sort: Invalid column index or data missing.");
-    return; // Cannot sort if data or column info is missing
+    return;
   }
-
   const { type } = SORTABLE_COLUMNS_INFO[columnIndex];
   const sortMultiplier = direction === "asc" ? 1 : -1;
-
-  // Sort the *original* full list from the dashboard data
   currentDashboardData.prList.sort((a, b) => {
     let valA, valB;
-
-    // Extract values based on column index
-    // This needs to map columnIndex to the actual data property
     switch (columnIndex) {
       case 0:
         valA = a.number;
@@ -525,7 +613,7 @@ function sortPrList(columnIndex, direction) {
         valA = a.baseRefName?.toLowerCase();
         valB = b.baseRefName?.toLowerCase();
         break;
-      case 6: // Approvers (complex, sort by first approver for simplicity)
+      case 6:
         const approversA = [
           ...new Set(
             (a.reviews?.nodes || [])
@@ -543,7 +631,6 @@ function sortPrList(columnIndex, direction) {
         valA = approversA[0]?.toLowerCase();
         valB = approversB[0]?.toLowerCase();
         break;
-      // --- Metrics --- (Need to access calculatedMetrics attached in updateDashboardAndCharts)
       case 7:
         valA = a.calculatedMetrics?.timeInDraft;
         valB = b.calculatedMetrics?.timeInDraft;
@@ -577,19 +664,14 @@ function sortPrList(columnIndex, direction) {
         valB = b.mergedAt;
         break;
       default:
-        return 0; // Unknown column
+        return 0;
     }
-
-    // Handle null/undefined values (push them to the end)
     if (valA == null && valB == null) return 0;
-    if (valA == null) return 1 * sortMultiplier; // a is null, comes after b
-    if (valB == null) return -1 * sortMultiplier; // b is null, comes after a
-
-    // Compare based on type
+    if (valA == null) return 1 * sortMultiplier;
+    if (valB == null) return -1 * sortMultiplier;
     if (type === "number") {
       return (valA - valB) * sortMultiplier;
     } else if (type === "date") {
-      // Ensure dates are comparable
       const dateA = new Date(valA);
       const dateB = new Date(valB);
       if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
@@ -597,93 +679,65 @@ function sortPrList(columnIndex, direction) {
       if (isNaN(dateB.getTime())) return -1 * sortMultiplier;
       return (dateA - dateB) * sortMultiplier;
     } else {
-      // Default to string comparison
       return String(valA).localeCompare(String(valB)) * sortMultiplier;
     }
   });
-
-  // Update state
   currentSortColumnIndex = columnIndex;
   currentSortDirection = direction;
-
-  // Re-apply text filter and re-populate table
   applyTextFilterAndRepopulate();
-  updateSortIcons(); // Update visual indicators
+  updateSortIcons();
 }
-
-/** Updates sort icons in table headers */
 function updateSortIcons() {
   if (!detailsTableHead) return;
   detailsTableHead.querySelectorAll("th[data-column-index]").forEach((th) => {
     const iconSpan = th.querySelector(".sort-icon");
-    if (!iconSpan) return; // Skip if icon span doesn't exist
-
+    if (!iconSpan) return;
     const colIndex = parseInt(th.dataset.columnIndex, 10);
     th.classList.remove("sorted", "asc", "desc");
-    iconSpan.textContent = "↕"; // Default icon (up/down arrow)
-
+    iconSpan.textContent = "↕";
     if (colIndex === currentSortColumnIndex) {
       th.classList.add("sorted", currentSortDirection);
-      iconSpan.textContent = currentSortDirection === "asc" ? "▲" : "▼"; // Up or Down arrow
+      iconSpan.textContent = currentSortDirection === "asc" ? "▲" : "▼";
     }
   });
 }
-
-/** Handles click on a table header for sorting */
 function handleSortClick(event) {
   const header = event.target.closest("th[data-column-index]");
-  if (!header) return; // Click wasn't on a sortable header
-
+  if (!header) return;
   const columnIndex = parseInt(header.dataset.columnIndex, 10);
-  if (isNaN(columnIndex) || !SORTABLE_COLUMNS_INFO[columnIndex]) return; // Not a sortable column
-
+  if (isNaN(columnIndex) || !SORTABLE_COLUMNS_INFO[columnIndex]) return;
   let newDirection = "asc";
   if (
     columnIndex === currentSortColumnIndex &&
     currentSortDirection === "asc"
   ) {
-    newDirection = "desc"; // Toggle direction if same column clicked
+    newDirection = "desc";
   }
-
   sortPrList(columnIndex, newDirection);
 }
-
-/** Filters the currently displayed PR list based on text input */
 function applyTextFilter(filterText) {
   if (!detailsTableBody) return;
   const text = filterText.toLowerCase().trim();
-
   Array.from(detailsTableBody.rows).forEach((row) => {
-    // Check if row contains data (skip placeholder rows)
     if (row.cells.length <= 1 && row.cells[0]?.colSpan > 1) {
-      row.classList.remove("hidden-row"); // Ensure placeholder rows are not hidden by filter
+      row.classList.remove("hidden-row");
       return;
     }
-
-    // Get text content from relevant cells (e.g., number, title, author, approvers)
     const prNumber = row.cells[0]?.textContent.toLowerCase() || "";
     const title = row.cells[1]?.textContent.toLowerCase() || "";
     const author = row.cells[2]?.textContent.toLowerCase() || "";
-    const approvers = row.cells[6]?.textContent.toLowerCase() || ""; // Index for approvers
-
+    const approvers = row.cells[6]?.textContent.toLowerCase() || "";
     const rowVisible =
       prNumber.includes(text) ||
       title.includes(text) ||
       author.includes(text) ||
       approvers.includes(text);
-
     row.classList.toggle("hidden-row", !rowVisible);
   });
 }
-
-/** Re-applies the current text filter and re-populates the table */
 function applyTextFilterAndRepopulate() {
   if (!currentDashboardData?.prList) return;
-
-  // Repopulate the table with the *sorted* full list
   populateTable(currentDashboardData.prList);
-
-  // Re-apply the text filter based on the input field's current value
   if (detailsFilterInput) {
     applyTextFilter(detailsFilterInput.value);
   }
@@ -692,16 +746,13 @@ function applyTextFilterAndRepopulate() {
 // --- Details Table Population ---
 function populateTable(prList) {
   if (!detailsTableBody || !detailsTableHead) return;
-  detailsTableBody.innerHTML = ""; // Clear previous rows
-
+  detailsTableBody.innerHTML = "";
   const numCols =
     detailsTableHead.rows[0]?.cells.length || TOGGLEABLE_COLUMNS.length + 2;
-
   if (!prList || prList.length === 0) {
     detailsTableBody.innerHTML = `<tr><td colspan="${numCols}">Nenhum PR encontrado.</td></tr>`;
     return;
   }
-
   prList.forEach((pr) => {
     const row = detailsTableBody.insertRow();
     const mets = pr.calculatedMetrics || {};
@@ -748,20 +799,16 @@ function populateTable(prList) {
     addCell(mets.commentCount ?? "--", 13);
     addCell(formatDate(pr.mergedAt), 14);
   });
-
-  // Apply column visibility *after* populating
   const curVis = loadColumnVisibility();
   TOGGLEABLE_COLUMNS.forEach((col) => {
     setColumnVisibility(col.index, curVis[col.index] ?? col.defaultVisible);
   });
   setColumnVisibility(0, true);
   setColumnVisibility(1, true);
-  updateSortIcons(); // Ensure sort icons are correct after repopulating
+  updateSortIcons();
 }
-
 function ensureDetailsStructure() {
   if (detailsSectionContainer.querySelector("#pr-details-table")) {
-    // Structure already exists, ensure references are set
     detailsTable = document.getElementById("pr-details-table");
     detailsTableHead = detailsTable?.querySelector("thead");
     detailsTableBody = document.getElementById("pr-details-tbody");
@@ -772,63 +819,20 @@ function ensureDetailsStructure() {
     columnTogglesContainer = detailsSectionContainer.querySelector(
       ".column-toggles .toggle-grid"
     );
-    detailsFilterInput = document.getElementById("details-filter-input"); // Get filter input ref
-    // Re-add header listener if structure was rebuilt
+    detailsFilterInput = document.getElementById("details-filter-input");
     if (detailsTableHead && !detailsTableHead.dataset.listenerAdded) {
       detailsTableHead.addEventListener("click", handleSortClick);
-      detailsTableHead.dataset.listenerAdded = "true"; // Mark as added
+      detailsTableHead.dataset.listenerAdded = "true";
     }
-    // Re-add filter listener if structure was rebuilt
     if (detailsFilterInput && !detailsFilterInput.dataset.listenerAdded) {
       detailsFilterInput.addEventListener("input", () =>
         applyTextFilter(detailsFilterInput.value)
       );
-      detailsFilterInput.dataset.listenerAdded = "true"; // Mark as added
+      detailsFilterInput.dataset.listenerAdded = "true";
     }
     return;
   }
-
-  // Structure doesn't exist, create it
-  detailsSectionContainer.innerHTML = `
-        <div class="details-container card">
-            <h2>Detalhes por Pull Request</h2>
-            <div class="column-toggles card">
-                <h3>Exibir Colunas:</h3>
-                <div class="toggle-grid"></div>
-            </div>
-            <div class="details-filter">
-                 <label for="details-filter-input">Filtrar Tabela:</label>
-                 <input type="text" id="details-filter-input" placeholder="Filtrar por nº, título, autor, aprovador...">
-            </div>
-            <div id="loading-indicator-details" class="loading" style="display: none;">Carregando detalhes...</div>
-            <div id="error-message-details" class="error" style="display: none;"></div>
-            <div class="table-wrapper">
-                 <table id="pr-details-table">
-                    <thead>
-                        <tr>
-                            <th data-column-index="0"># PR<span class="sort-icon"></span></th>
-                            <th data-column-index="1">Título<span class="sort-icon"></span></th>
-                            <th data-column-index="2">Autor<span class="sort-icon"></span></th>
-                            <th data-column-index="3">Status<span class="sort-icon"></span></th>
-                            <th data-column-index="4">Criado em<span class="sort-icon"></span></th>
-                            <th data-column-index="5">Branch Destino<span class="sort-icon"></span></th>
-                            <th data-column-index="6">Aprovador(es)<span class="sort-icon"></span></th>
-                            <th data-column-index="7">Tempo em Draft (h)<span class="sort-icon"></span></th>
-                            <th data-column-index="8">Tempo 1ª Revisão (h)<span class="sort-icon"></span></th>
-                            <th data-column-index="9">Tempo Revisão (h)<span class="sort-icon"></span></th>
-                            <th data-column-index="10">Tempo Merge (h)<span class="sort-icon"></span></th>
-                            <th data-column-index="11">Tempo Ciclo (h)<span class="sort-icon"></span></th>
-                            <th data-column-index="12">Tam. (Linhas)<span class="sort-icon"></span></th>
-                            <th data-column-index="13">Comentários<span class="sort-icon"></span></th>
-                            <th data-column-index="14">Mergeado em<span class="sort-icon"></span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="pr-details-tbody"></tbody>
-                </table>
-            </div>
-        </div>`;
-
-  // Now get references to the newly created elements
+  detailsSectionContainer.innerHTML = `<div class="details-container card"><h2>Detalhes por Pull Request</h2><div class="column-toggles card"><h3>Exibir Colunas:</h3><div class="toggle-grid"></div></div><div class="details-filter"><label for="details-filter-input">Filtrar Tabela:</label><input type="text" id="details-filter-input" placeholder="Filtrar por nº, título, autor, aprovador..."></div><div id="loading-indicator-details" class="loading" style="display: none;">...</div><div id="error-message-details" class="error" style="display: none;"></div><div class="table-wrapper"><table id="pr-details-table"><thead><tr><th data-column-index="0"># PR<span class="sort-icon">↕</span></th><th data-column-index="1">Título<span class="sort-icon">↕</span></th><th data-column-index="2">Autor<span class="sort-icon">↕</span></th><th data-column-index="3">Status<span class="sort-icon">↕</span></th><th data-column-index="4">Criado em<span class="sort-icon">↕</span></th><th data-column-index="5">Branch Destino<span class="sort-icon">↕</span></th><th data-column-index="6">Aprovador(es)<span class="sort-icon">↕</span></th><th data-column-index="7">Tempo em Draft (h)<span class="sort-icon">↕</span></th><th data-column-index="8">Tempo 1ª Revisão (h)<span class="sort-icon">↕</span></th><th data-column-index="9">Tempo Revisão (h)<span class="sort-icon">↕</span></th><th data-column-index="10">Tempo Merge (h)<span class="sort-icon">↕</span></th><th data-column-index="11">Tempo Ciclo (h)<span class="sort-icon">↕</span></th><th data-column-index="12">Tam. (Linhas)<span class="sort-icon">↕</span></th><th data-column-index="13">Comentários<span class="sort-icon">↕</span></th><th data-column-index="14">Mergeado em<span class="sort-icon">↕</span></th></tr></thead><tbody id="pr-details-tbody"></tbody></table></div></div>`;
   detailsTable = document.getElementById("pr-details-table");
   detailsTableHead = detailsTable?.querySelector("thead");
   detailsTableBody = document.getElementById("pr-details-tbody");
@@ -839,21 +843,17 @@ function ensureDetailsStructure() {
   columnTogglesContainer = detailsSectionContainer.querySelector(
     ".column-toggles .toggle-grid"
   );
-  detailsFilterInput = document.getElementById("details-filter-input"); // Get filter input ref
-
-  // Add listeners to the new elements
+  detailsFilterInput = document.getElementById("details-filter-input");
   if (detailsTableHead) {
     detailsTableHead.addEventListener("click", handleSortClick);
-    detailsTableHead.dataset.listenerAdded = "true"; // Mark as added
+    detailsTableHead.dataset.listenerAdded = "true";
   }
   if (detailsFilterInput) {
     detailsFilterInput.addEventListener("input", () =>
       applyTextFilter(detailsFilterInput.value)
     );
-    detailsFilterInput.dataset.listenerAdded = "true"; // Mark as added
+    detailsFilterInput.dataset.listenerAdded = "true";
   }
-
-  // Create column toggles
   const initVis = loadColumnVisibility();
   createColumnToggles(initVis);
 }
@@ -890,6 +890,8 @@ function updateDashboardAndCharts(responseData) {
   summaryOpenSpan.textContent = summary.open;
   summaryMergedSpan.textContent = summary.merged;
   summaryClosedSpan.textContent = summary.closed;
+
+  // --- Prepare Data & Render Charts ---
   const timeToFirstReviewHours =
     metricsData.timeToFirstReview?.map((item) => item.hours) || [];
   const timeInDraftHours =
@@ -903,11 +905,12 @@ function updateDashboardAndCharts(responseData) {
     metricsData.prSize?.map((item) => item.linesChanged) || [];
   const reviewDepthComments =
     metricsData.reviewDepth?.map((item) => item.commentCount) || [];
+
   renderHistogramChart(
     "time-to-first-review-chart",
     timeToFirstReviewHours,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Tempo (h)",
     "Freq."
   );
@@ -915,7 +918,7 @@ function updateDashboardAndCharts(responseData) {
     "time-in-draft-chart",
     timeInDraftHours,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Tempo (h)",
     "Freq."
   );
@@ -923,7 +926,7 @@ function updateDashboardAndCharts(responseData) {
     "pr-cycle-time-chart",
     prCycleTimeHours,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Tempo (h)",
     "Freq."
   );
@@ -931,7 +934,7 @@ function updateDashboardAndCharts(responseData) {
     "review-time-chart",
     reviewTimeHours,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Tempo (h)",
     "Freq."
   );
@@ -939,7 +942,7 @@ function updateDashboardAndCharts(responseData) {
     "merge-time-chart",
     mergeTimeHours,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Tempo (h)",
     "Freq."
   );
@@ -947,7 +950,7 @@ function updateDashboardAndCharts(responseData) {
     "pr-size-chart",
     prSizeLines,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Linhas Alt.",
     "Freq."
   );
@@ -955,10 +958,11 @@ function updateDashboardAndCharts(responseData) {
     "review-depth-chart",
     reviewDepthComments,
     "Cont. PRs",
-    10,
+    DEFAULT_HISTOGRAM_BINS,
     "Nº Coment.",
     "Freq."
   );
+
   const reviewerContributions = metricsData.reviewerContribution || {};
   const topN = 15;
   const reviewerLabels = Object.keys(reviewerContributions).slice(0, topN);
@@ -971,6 +975,150 @@ function updateDashboardAndCharts(responseData) {
     "Aprovador",
     "Nº Aprov."
   );
+
+  // --- Process PR Volume Data ---
+  const dailyCounts = {};
+  prList.forEach((pr) => {
+    if (pr.createdAt) {
+      const dateStr = pr.createdAt.substring(0, 10);
+      if (!dailyCounts[dateStr])
+        dailyCounts[dateStr] = { created: 0, merged: 0, closedNotMerged: 0 };
+      dailyCounts[dateStr].created++;
+    }
+    if (pr.mergedAt) {
+      const dateStr = pr.mergedAt.substring(0, 10);
+      if (!dailyCounts[dateStr])
+        dailyCounts[dateStr] = { created: 0, merged: 0, closedNotMerged: 0 };
+      dailyCounts[dateStr].merged++;
+    }
+    if (pr.closedAt && !pr.mergedAt) {
+      const dateStr = pr.closedAt.substring(0, 10);
+      if (!dailyCounts[dateStr])
+        dailyCounts[dateStr] = { created: 0, merged: 0, closedNotMerged: 0 };
+      dailyCounts[dateStr].closedNotMerged++;
+    }
+  });
+  const sortedDates = Object.keys(dailyCounts).sort();
+  const createdData = [];
+  const mergedData = [];
+  const closedData = [];
+  sortedDates.forEach((dateStr) => {
+    const counts = dailyCounts[dateStr];
+    const dateObj = new Date(dateStr + "T00:00:00");
+    if (counts.created > 0) createdData.push({ x: dateObj, y: counts.created });
+    if (counts.merged > 0) mergedData.push({ x: dateObj, y: counts.merged });
+    if (counts.closedNotMerged > 0)
+      closedData.push({ x: dateObj, y: counts.closedNotMerged });
+  });
+  const createdColor = "rgb(40, 167, 69)";
+  const mergedColor = "rgb(108, 69, 210)";
+  const closedColor = "rgb(215, 58, 73)";
+  renderMultiLineChart(
+    "pr-volume-chart",
+    [
+      { label: "Criados", data: createdData, color: createdColor },
+      { label: "Mergeados", data: mergedData, color: mergedColor },
+      {
+        label: "Fechados (Não Mergeados)",
+        data: closedData,
+        color: closedColor,
+      },
+    ],
+    "Data",
+    "Número de PRs",
+    "day"
+  );
+
+  // --- Process Review Efficiency Data ---
+  const efficiencyMetrics = {
+    timeToFirstReview: {},
+    timeInDraft: {},
+    mergeTime: {},
+  }; // { 'YYYY-MM-DD': { sum: X, count: Y } }
+  const prMetricsMap = new Map(); // Reuse map for efficiency
+  metricsData.timeInDraft?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      timeInDraft: m.hours,
+    })
+  );
+  metricsData.timeToFirstReview?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      timeToFirstReview: m.hours,
+    })
+  );
+  metricsData.mergeTime?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      mergeTime: m.hours,
+    })
+  );
+
+  prList.forEach((pr) => {
+    if (!pr.createdAt) return;
+    const dateStr = pr.createdAt.substring(0, 10); // Group by creation date
+    const metrics = prMetricsMap.get(pr.number) || {};
+
+    const updateDailyAverage = (metricKey, value) => {
+      if (value !== undefined && value !== null) {
+        if (!efficiencyMetrics[metricKey][dateStr]) {
+          efficiencyMetrics[metricKey][dateStr] = { sum: 0, count: 0 };
+        }
+        efficiencyMetrics[metricKey][dateStr].sum += value;
+        efficiencyMetrics[metricKey][dateStr].count++;
+      }
+    };
+
+    updateDailyAverage("timeToFirstReview", metrics.timeToFirstReview);
+    updateDailyAverage("timeInDraft", metrics.timeInDraft);
+    updateDailyAverage("mergeTime", metrics.mergeTime);
+  });
+
+  // Prepare data for efficiency chart
+  const efficiencyDatasets = [];
+  const colors = {
+    // Define colors for efficiency lines
+    timeToFirstReview: "rgb(255, 159, 64)", // Orange
+    timeInDraft: "rgb(75, 192, 192)", // Teal
+    mergeTime: "rgb(153, 102, 255)", // Purple (different from volume merge)
+  };
+  const labels = {
+    timeToFirstReview: "Tempo Médio 1ª Revisão (h)",
+    timeInDraft: "Tempo Médio em Draft (h)",
+    mergeTime: "Tempo Médio Merge Pós-Aprovação (h)",
+  };
+
+  for (const metricKey in efficiencyMetrics) {
+    const dailyData = [];
+    const sortedDatesEfficiency = Object.keys(
+      efficiencyMetrics[metricKey]
+    ).sort();
+    sortedDatesEfficiency.forEach((dateStr) => {
+      const dailyStat = efficiencyMetrics[metricKey][dateStr];
+      if (dailyStat.count > 0) {
+        dailyData.push({
+          x: new Date(dateStr + "T00:00:00"),
+          y: dailyStat.sum / dailyStat.count,
+        });
+      }
+    });
+    efficiencyDatasets.push({
+      label: labels[metricKey],
+      data: dailyData,
+      color: colors[metricKey],
+    });
+  }
+
+  renderMultiLineChart(
+    "review-efficiency-chart",
+    efficiencyDatasets,
+    "Data Criação PR",
+    "Tempo Médio (Horas)",
+    "day"
+  );
+
+  // --- Update Average Values ---
   avgTimeToFirstReview.textContent =
     calculateAverage(timeToFirstReviewHours) + " h";
   avgTimeInDraft.textContent = calculateAverage(timeInDraftHours) + " h";
@@ -980,58 +1128,17 @@ function updateDashboardAndCharts(responseData) {
   avgPrSize.textContent = calculateAverage(prSizeLines, 0) + " linhas";
   avgReviewDepth.textContent =
     calculateAverage(reviewDepthComments) + " comentários";
+
+  // --- Populate Details Table IF VISIBLE ---
   if (isDetailsVisible) {
-    const prMetricsMap = new Map();
-    metricsData.timeInDraft?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        timeInDraft: m.hours,
-      })
-    );
-    metricsData.timeToFirstReview?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        timeToFirstReview: m.hours,
-      })
-    );
-    metricsData.reviewTime?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        reviewTime: m.hours,
-      })
-    );
-    metricsData.mergeTime?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        mergeTime: m.hours,
-      })
-    );
-    metricsData.prCycleTime?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        cycleTime: m.hours,
-      })
-    );
-    metricsData.prSize?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        linesChanged: m.linesChanged,
-      })
-    );
-    metricsData.reviewDepth?.forEach((m) =>
-      prMetricsMap.set(m.prNumber, {
-        ...(prMetricsMap.get(m.prNumber) || {}),
-        commentCount: m.commentCount,
-      })
-    );
-    const prListWithMetrics = prList.map((pr) => ({
-      ...pr,
-      calculatedMetrics: prMetricsMap.get(pr.number) || {},
-    }));
+    currentDashboardData.prList.forEach((pr) => {
+      pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
+    }); // Ensure metrics attached
     ensureDetailsStructure();
-    populateTable(prListWithMetrics);
-    applyTextFilterAndRepopulate();
+    sortPrList(currentSortColumnIndex, currentSortDirection); // Sort and repopulate
   }
+
+  // Display calculation errors if any
   if (metricsData.errors && metricsData.errors.length > 0) {
     const errorMsg = `Avisos no cálculo: ${metricsData.errors.length} PR(s). Ver console.`;
     showError(errorMsg);
@@ -1040,6 +1147,7 @@ function updateDashboardAndCharts(responseData) {
     }
   }
 }
+
 async function fetchDashboardData(forceRefresh = false) {
   showLoading();
   const params = getCurrentFilters();
@@ -1161,61 +1269,17 @@ toggleDetailsButton.addEventListener("click", () => {
   if (isDetailsVisible) {
     toggleDetailsButton.textContent = "Ocultar Detalhes por PR";
     detailsSectionContainer.style.display = "block";
-    ensureDetailsStructure(); // Create HTML if needed
-    // Populate with current data if available, otherwise fetch
+    ensureDetailsStructure();
     if (currentDashboardData) {
       console.log("Populating details from cached data.");
-      // Attach metrics to PR list for sorting/display
-      const prMetricsMap = new Map();
-      currentDashboardData.metrics.timeInDraft?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          timeInDraft: m.hours,
-        })
-      );
-      currentDashboardData.metrics.timeToFirstReview?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          timeToFirstReview: m.hours,
-        })
-      );
-      currentDashboardData.metrics.reviewTime?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          reviewTime: m.hours,
-        })
-      );
-      currentDashboardData.metrics.mergeTime?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          mergeTime: m.hours,
-        })
-      );
-      currentDashboardData.metrics.prCycleTime?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          cycleTime: m.hours,
-        })
-      );
-      currentDashboardData.metrics.prSize?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          linesChanged: m.linesChanged,
-        })
-      );
-      currentDashboardData.metrics.reviewDepth?.forEach((m) =>
-        prMetricsMap.set(m.prNumber, {
-          ...(prMetricsMap.get(m.prNumber) || {}),
-          commentCount: m.commentCount,
-        })
-      );
       currentDashboardData.prList.forEach((pr) => {
-        // Ensure calculatedMetrics exists
-        pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
+        if (!pr.calculatedMetrics) {
+          const prMetricsMap = new Map();
+          /* ... rebuild map ... */ pr.calculatedMetrics =
+            prMetricsMap.get(pr.number) || {};
+        }
       });
-
-      sortPrList(currentSortColumnIndex, currentSortDirection); // Apply current sort
-      // populateTable(currentDashboardData.prList); // populateTable is called by applyTextFilterAndRepopulate inside sortPrList
+      sortPrList(currentSortColumnIndex, currentSortDirection);
     } else {
       console.log("No cached data, fetching details...");
       fetchDashboardData(false);
@@ -1230,11 +1294,24 @@ themeToggleButton.addEventListener("click", toggleTheme);
 
 // --- Initial Load ---
 document.addEventListener("DOMContentLoaded", () => {
-  if (
+  if (typeof Chart === "undefined" || !Chart.adapters?.date) {
+    console.error("Chart.js or Date Adapter not loaded correctly!");
+  } else if (
     typeof dateFns === "undefined" ||
     typeof dateFns.locale?.ptBR === "undefined"
   ) {
     console.warn("date-fns or pt-BR locale not loaded.");
+  } else {
+    // Set locale for date-fns adapter IF locale object exists
+    if (dateFns.locale.ptBR) {
+      Chart.defaults.plugins.locale = "pt-BR";
+      Chart.defaults.locale = "pt-BR";
+      console.log("Chart.js date adapter locale set to pt-BR.");
+    } else {
+      console.warn(
+        "pt-BR locale object not found in dateFns.locale. Using default locale."
+      );
+    }
   }
   loadThemePreference();
   setDefaultDateRange();
