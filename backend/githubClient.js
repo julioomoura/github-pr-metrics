@@ -25,8 +25,7 @@ if (!GITHUB_TOKEN || !GITHUB_REPO_OWNER || !GITHUB_REPO_NAME || !GHE_HOSTNAME) {
 /**
  * GraphQL query to fetch pull requests and relevant details.
  * Fetches details needed for metric calculations.
- * Adjusted requestedReviewer to avoid needing 'read:org' scope.
- * Added review comments count for accurate total comment count.
+ * Added 'name' field for authors.
  */
 const PULL_REQUEST_QUERY = `
   query GetPullRequests($owner: String!, $name: String!, $first: Int!, $after: String, $states: [PullRequestState!]) {
@@ -48,14 +47,17 @@ const PULL_REQUEST_QUERY = `
           isDraft
           author {
             login
+            name # <-- Adicionado campo name
           }
           baseRefName # Target branch
           headRefName # Source branch
-          # Reviews - fetching first 50, might need pagination if many reviews
-          # Fetching review comment count within each review
+          # Reviews - fetching first 50
           reviews(first: 50) {
              nodes {
-               author { login }
+               author {
+                 login
+                 name # <-- Adicionado campo name
+               }
                createdAt
                state # APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
                comments { # Comments made within this specific review
@@ -64,12 +66,10 @@ const PULL_REQUEST_QUERY = `
              }
           }
           # Review Requests - who was asked to review
-          # REMOVED '... on Team { name }' to avoid requiring 'read:org' scope
           reviewRequests(first: 10) {
             nodes {
               requestedReviewer {
-                 ... on User { login }
-                 # ... on Team { name } # Removed this line
+                 ... on User { login name } # <-- Adicionado campo name
               }
             }
           }
@@ -77,16 +77,16 @@ const PULL_REQUEST_QUERY = `
           comments(first: 1) { # Only need totalCount here
             totalCount
           }
-          # Commits associated with the PR - fetching last commit for potential cycle time start
+          # Commits associated with the PR
           commits(last: 1) {
              nodes {
                commit {
                  committedDate
-                 authoredDate # Might be different from committedDate
+                 authoredDate
                }
              }
           }
-          # Timeline items - useful for draft/ready events, first review etc. Fetching last 50 events.
+          # Timeline items
           timelineItems(last: 50, itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, PULL_REQUEST_REVIEW]) {
             nodes {
               __typename
@@ -97,7 +97,10 @@ const PULL_REQUEST_QUERY = `
                 createdAt
               }
               ... on PullRequestReview {
-                 author { login }
+                 author {
+                    login
+                    name # <-- Adicionado campo name
+                 }
                  createdAt
                  state
               }
@@ -140,7 +143,6 @@ async function fetchGraphQL(query, variables) {
         `[GraphQL] API Error: ${response.status} ${response.statusText}`,
         errorText
       );
-      // Try to parse JSON error if possible
       let detail = errorText;
       try {
         const errorJson = JSON.parse(errorText);
@@ -148,7 +150,7 @@ async function fetchGraphQL(query, variables) {
           detail = errorJson.message;
         }
       } catch (e) {
-        /* ignore json parse error */
+        /* ignore */
       }
       throw new Error(
         `GitHub API request failed: ${response.status} ${response.statusText}. Detail: ${detail}`
@@ -161,7 +163,6 @@ async function fetchGraphQL(query, variables) {
         "[GraphQL] API Errors:",
         JSON.stringify(data.errors, null, 2)
       );
-      // Combine multiple errors if they exist
       const errorMessages = data.errors.map((err) => err.message).join("; ");
       throw new Error(`GitHub API returned errors: ${errorMessages}`);
     }
@@ -169,7 +170,7 @@ async function fetchGraphQL(query, variables) {
     return data;
   } catch (error) {
     console.error("[GraphQL] Fetch error:", error);
-    throw error; // Re-throw the error to be handled upstream
+    throw error;
   }
 }
 
@@ -186,7 +187,7 @@ async function getAllPullRequests(
 ) {
   const cacheKey = `prs_${GITHUB_REPO_OWNER}_${GITHUB_REPO_NAME}_${states.join(
     "_"
-  )}_v2`; // Changed cache key due to query change
+  )}_v3`; // Changed cache key due to query change
 
   if (!forceRefresh) {
     const cachedData = cache.get(cacheKey);
@@ -231,7 +232,7 @@ async function getAllPullRequests(
           "[GitHubClient] Received unexpected data structure from API:",
           data
         );
-        hasNextPage = false; // Stop pagination if structure is wrong
+        hasNextPage = false;
         break;
       }
 
@@ -245,24 +246,15 @@ async function getAllPullRequests(
       console.log(
         `[GitHubClient] Fetched ${fetchedPRs.length} PRs on page ${pageCount}. Total fetched: ${allPRs.length}. Has next page: ${hasNextPage}`
       );
-
-      // Optional: Add a small delay between pages to avoid hitting rate limits aggressively
-      // await new Promise(resolve => setTimeout(resolve, 200));
     } catch (error) {
       console.error(`[GitHubClient] Error fetching page ${pageCount}:`, error);
-      // Decide how to handle partial failures: stop, retry, or continue?
-      // For simplicity, we'll stop here.
       hasNextPage = false;
-      // Return null if a page fails and we don't have complete data
-      // Or throw error to indicate partial failure
       console.error(
         `[GitHubClient] Failed to fetch all PRs. Returning ${allPRs.length} fetched so far due to error.`
       );
-      // Return partial data only if some were fetched, otherwise null/error
       if (allPRs.length > 0) {
-        // Optionally cache partial results with a shorter TTL?
-        // cache.set(cacheKey, allPRs, CACHE_TTL / 4); // Shorter cache for partial data
-        return allPRs; // Return what we have
+        cache.set(cacheKey, allPRs, CACHE_TTL / 2); // Cache partial results with shorter TTL
+        return allPRs;
       } else {
         return null; // Indicate complete failure
       }
@@ -274,14 +266,14 @@ async function getAllPullRequests(
   );
 
   // Store the successfully fetched data in cache only if complete
-  if (allPRs.length > 0 && !afterCursor) {
-    // Ensure we finished pagination if hasNextPage became false without error
+  if (allPRs.length > 0 && !hasNextPage) {
+    // Check if pagination finished naturally
     cache.set(cacheKey, allPRs, CACHE_TTL);
-  } else if (allPRs.length > 0 && afterCursor) {
+  } else if (allPRs.length > 0) {
     console.warn(
       "[GitHubClient] Caching potentially incomplete PR list due to pagination stopping early."
     );
-    cache.set(cacheKey, allPRs, CACHE_TTL / 2); // Cache partial results with shorter TTL
+    cache.set(cacheKey, allPRs, CACHE_TTL / 2);
   }
 
   return allPRs;

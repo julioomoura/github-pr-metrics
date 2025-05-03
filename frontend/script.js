@@ -24,10 +24,10 @@ const summaryMergedSpan = document.getElementById("summary-merged");
 const summaryClosedSpan = document.getElementById("summary-closed");
 const summaryMostApprovalsSpan = document.getElementById(
   "summary-most-approvals"
-); // Novo
+);
 const summaryLeastApprovalsSpan = document.getElementById(
   "summary-least-approvals"
-); // Novo
+);
 // Average value elements (Charts)
 const avgTimeToFirstReview = document.getElementById(
   "avg-time-to-first-review"
@@ -585,6 +585,19 @@ function sortPrList(columnIndex, direction) {
   }
   const { type } = SORTABLE_COLUMNS_INFO[columnIndex];
   const sortMultiplier = direction === "asc" ? 1 : -1;
+  const getUserIdentifier = (user) => user?.name || user?.login || "";
+  const getFirstApproverIdentifier = (pr) => {
+    const approvers = [
+      ...new Set(
+        (pr.reviews?.nodes || [])
+          .filter(
+            (r) => r.state === "APPROVED" && (r.author?.name || r.author?.login)
+          )
+          .map((r) => getUserIdentifier(r.author))
+      ),
+    ];
+    return approvers[0] || "";
+  };
   currentDashboardData.prList.sort((a, b) => {
     let valA, valB;
     switch (columnIndex) {
@@ -597,8 +610,8 @@ function sortPrList(columnIndex, direction) {
         valB = b.title?.toLowerCase();
         break;
       case 2:
-        valA = a.author?.login?.toLowerCase();
-        valB = b.author?.login?.toLowerCase();
+        valA = getUserIdentifier(a.author)?.toLowerCase();
+        valB = getUserIdentifier(b.author)?.toLowerCase();
         break;
       case 3:
         valA = a.state?.toLowerCase();
@@ -613,22 +626,8 @@ function sortPrList(columnIndex, direction) {
         valB = b.baseRefName?.toLowerCase();
         break;
       case 6:
-        const approversA = [
-          ...new Set(
-            (a.reviews?.nodes || [])
-              .filter((r) => r.state === "APPROVED" && r.author?.login)
-              .map((r) => r.author.login)
-          ),
-        ];
-        const approversB = [
-          ...new Set(
-            (b.reviews?.nodes || [])
-              .filter((r) => r.state === "APPROVED" && r.author?.login)
-              .map((r) => r.author.login)
-          ),
-        ];
-        valA = approversA[0]?.toLowerCase();
-        valB = approversB[0]?.toLowerCase();
+        valA = getFirstApproverIdentifier(a)?.toLowerCase();
+        valB = getFirstApproverIdentifier(b)?.toLowerCase();
         break;
       case 7:
         valA = a.calculatedMetrics?.timeInDraft;
@@ -752,6 +751,9 @@ function populateTable(prList) {
     detailsTableBody.innerHTML = `<tr><td colspan="${numCols}">Nenhum PR encontrado.</td></tr>`;
     return;
   }
+
+  // REMOVED console.log for author data
+
   prList.forEach((pr) => {
     const row = detailsTableBody.insertRow();
     const mets = pr.calculatedMetrics || {};
@@ -765,26 +767,34 @@ function populateTable(prList) {
       cell.dataset.columnIndex = idx;
       return cell;
     };
+
+    const authorIdentifier = pr.author?.name || pr.author?.login || "N/A";
+
     let approvers = "--";
     if (pr.reviews?.nodes) {
-      const unique = [
+      const uniqueApprovers = [
         ...new Set(
           pr.reviews.nodes
-            .filter((r) => r.state === "APPROVED" && r.author?.login)
-            .map((r) => r.author.login)
+            .filter(
+              (review) =>
+                review.state === "APPROVED" &&
+                (review.author?.name || review.author?.login)
+            )
+            .map((review) => review.author.name || review.author.login)
         ),
       ];
-      if (unique.length > 0) {
-        approvers = unique.join(", ");
+      if (uniqueApprovers.length > 0) {
+        approvers = uniqueApprovers.join(", ");
       }
     }
+
     addCell(
       `<a href="${pr.url || "#"}" target="_blank">${pr.number}</a>`,
       0,
       true
     );
     addCell(pr.title || "N/A", 1);
-    addCell(pr.author?.login || "N/A", 2);
+    addCell(authorIdentifier, 2);
     addCell(pr.state || "N/A", 3);
     addCell(formatDate(pr.createdAt), 4);
     addCell(pr.baseRefName || "N/A", 5);
@@ -892,23 +902,20 @@ function updateDashboardAndCharts(responseData) {
   summaryMergedSpan.textContent = summary.merged;
   summaryClosedSpan.textContent = summary.closed;
 
-  // -- Update Most/Least Approvers in Summary --
+  // Update Most/Least Approvers (using name or login)
   const reviewerContributions = metricsData.reviewerContribution || {};
   const sortedApprovers = Object.entries(reviewerContributions).sort(
     ([, countA], [, countB]) => countB - countA
-  ); // Already sorted desc by calculator
+  );
 
   if (sortedApprovers.length > 0) {
-    const mostApprover = sortedApprovers[0]; // First element has most
-    summaryMostApprovalsSpan.textContent = `${mostApprover[0]} (${mostApprover[1]})`;
-
-    // Find least (last element, assuming count > 0)
+    const mostApprover = sortedApprovers[0];
+    summaryMostApprovalsSpan.textContent = `${mostApprover[0]} (${mostApprover[1]})`; // Display name/login used as key
     const leastApprover = sortedApprovers[sortedApprovers.length - 1];
-    // Display least only if different from most and count > 0
     if (sortedApprovers.length > 1 && leastApprover[1] > 0) {
       summaryLeastApprovalsSpan.textContent = `${leastApprover[0]} (${leastApprover[1]})`;
     } else if (sortedApprovers.length === 1) {
-      summaryLeastApprovalsSpan.textContent = `${leastApprover[0]} (${leastApprover[1]})`; // Same person if only one
+      summaryLeastApprovalsSpan.textContent = `${leastApprover[0]} (${leastApprover[1]})`;
     } else {
       summaryLeastApprovalsSpan.textContent = "--";
     }
@@ -989,6 +996,7 @@ function updateDashboardAndCharts(responseData) {
     "Freq."
   );
 
+  // Use name/login for reviewer chart labels
   const topN = 15;
   const reviewerLabels = sortedApprovers
     .map((entry) => entry[0])
@@ -1062,7 +1070,7 @@ function updateDashboardAndCharts(responseData) {
     timeInDraft: {},
     mergeTime: {},
   };
-  const prMetricsMap = new Map(); // Use this map to avoid recalculating inside loop
+  const prMetricsMap = new Map();
   metricsData.timeInDraft?.forEach((m) =>
     prMetricsMap.set(m.prNumber, {
       ...(prMetricsMap.get(m.prNumber) || {}),
@@ -1081,7 +1089,6 @@ function updateDashboardAndCharts(responseData) {
       mergeTime: m.hours,
     })
   );
-  // Attach other metrics needed for table later
   metricsData.reviewTime?.forEach((m) =>
     prMetricsMap.set(m.prNumber, {
       ...(prMetricsMap.get(m.prNumber) || {}),
@@ -1106,18 +1113,14 @@ function updateDashboardAndCharts(responseData) {
       commentCount: m.commentCount,
     })
   );
-
-  // Attach the calculated metrics map to each PR in the main list
   prList.forEach((pr) => {
     pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
-  });
+  }); // Attach metrics
 
-  // Now aggregate for the efficiency chart
   prList.forEach((pr) => {
     if (!pr.createdAt) return;
     const dateStr = pr.createdAt.substring(0, 10);
-    const metrics = pr.calculatedMetrics; // Use the attached metrics
-
+    const metrics = pr.calculatedMetrics;
     const updateDailyAverage = (metricKey, value) => {
       if (value !== undefined && value !== null) {
         if (!efficiencyMetrics[metricKey][dateStr])
@@ -1130,7 +1133,6 @@ function updateDashboardAndCharts(responseData) {
     updateDailyAverage("timeInDraft", metrics.timeInDraft);
     updateDailyAverage("mergeTime", metrics.mergeTime);
   });
-
   const efficiencyDatasets = [];
   const colors = {
     timeToFirstReview: "rgb(255, 159, 64)",
@@ -1183,9 +1185,8 @@ function updateDashboardAndCharts(responseData) {
 
   // --- Populate Details Table IF VISIBLE ---
   if (isDetailsVisible) {
-    // Metrics are already attached to prList objects
     ensureDetailsStructure();
-    sortPrList(currentSortColumnIndex, currentSortDirection); // Sort and repopulate
+    sortPrList(currentSortColumnIndex, currentSortDirection);
   }
 
   // Display calculation errors if any
@@ -1325,7 +1326,16 @@ toggleDetailsButton.addEventListener("click", () => {
       // Ensure metrics are attached before sorting
       currentDashboardData.prList.forEach((pr) => {
         if (!pr.calculatedMetrics) {
-          /* ... rebuild map ... */
+          /* This logic needs refinement if called repeatedly */ const prMetricsMap =
+            new Map();
+          currentDashboardData.metrics.timeInDraft?.forEach((m) =>
+            prMetricsMap.set(m.prNumber, {
+              ...(prMetricsMap.get(m.prNumber) || {}),
+              timeInDraft: m.hours,
+            })
+          );
+          /* ... etc ... */ pr.calculatedMetrics =
+            prMetricsMap.get(pr.number) || {};
         }
       });
       sortPrList(currentSortColumnIndex, currentSortDirection);
@@ -1343,7 +1353,6 @@ themeToggleButton.addEventListener("click", toggleTheme);
 
 // --- Initial Load ---
 document.addEventListener("DOMContentLoaded", () => {
-  // Check date adapter and locale
   if (typeof Chart === "undefined" || !Chart.adapters?.date) {
     console.error("Chart.js or Date Adapter not loaded correctly!");
   } else if (
@@ -1353,9 +1362,9 @@ document.addEventListener("DOMContentLoaded", () => {
     console.warn("date-fns or pt-BR locale not loaded.");
   } else {
     if (dateFns.locale.ptBR) {
-      // Chart.defaults.plugins.locale = 'pt-BR'; // Setting default locale might not be needed if passed in options
-      // Chart.defaults.locale = 'pt-BR';
-      console.log("Chart.js date adapter pt-BR locale available.");
+      Chart.defaults.plugins.locale = "pt-BR";
+      Chart.defaults.locale = "pt-BR";
+      console.log("Chart.js date adapter locale set to pt-BR.");
     } else {
       console.warn("pt-BR locale object not found in dateFns.locale.");
     }
