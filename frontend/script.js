@@ -17,10 +17,18 @@ const forceRefreshButton = document.getElementById("force-refresh");
 const toggleDetailsButton = document.getElementById("toggle-details-btn");
 const loadingIndicator = document.getElementById("loading-indicator");
 const errorMessageDiv = document.getElementById("error-message");
+// Summary elements
 const summaryCountSpan = document.getElementById("summary-count");
 const summaryOpenSpan = document.getElementById("summary-open");
 const summaryMergedSpan = document.getElementById("summary-merged");
 const summaryClosedSpan = document.getElementById("summary-closed");
+const summaryMostApprovalsSpan = document.getElementById(
+  "summary-most-approvals"
+); // Novo
+const summaryLeastApprovalsSpan = document.getElementById(
+  "summary-least-approvals"
+); // Novo
+// Average value elements (Charts)
 const avgTimeToFirstReview = document.getElementById(
   "avg-time-to-first-review"
 );
@@ -30,13 +38,16 @@ const avgReviewTime = document.getElementById("avg-review-time");
 const avgMergeTime = document.getElementById("avg-merge-time");
 const avgPrSize = document.getElementById("avg-pr-size");
 const avgReviewDepth = document.getElementById("avg-review-depth");
+// Datalist elements
 const authorDatalist = document.getElementById("author-list");
 const approverDatalist = document.getElementById("approver-list");
 const branchDatalist = document.getElementById("branch-list");
+// Details Section Container
 const detailsSectionContainer = document.getElementById(
   "details-section-container"
 );
 
+// Details Table Elements (will be created dynamically)
 let detailsTable = null;
 let detailsTableHead = null;
 let detailsTableBody = null;
@@ -293,8 +304,6 @@ function updateChartDefaults(theme) {
 }
 
 // --- Chart Rendering ---
-
-/** Renders Bar Chart */
 function renderBarChart(
   chartId,
   labels,
@@ -313,7 +322,6 @@ function renderBarChart(
   const accentColorBg = isDark
     ? "rgba(88, 166, 255, 0.6)"
     : "rgba(0, 122, 204, 0.6)";
-
   chartInstances[chartId] = new Chart(ctx, {
     type: "bar",
     data: {
@@ -345,8 +353,6 @@ function renderBarChart(
     },
   });
 }
-
-/** Renders Histogram Chart */
 function renderHistogramChart(
   chartId,
   dataPoints,
@@ -406,10 +412,8 @@ function renderHistogramChart(
       bins[binIndex]++;
     }
   });
-  renderBarChart(chartId, labels, bins, label, xAxisLabel, yAxisLabel); // Uses themed bar chart render
+  renderBarChart(chartId, labels, bins, label, xAxisLabel, yAxisLabel);
 }
-
-/** Renders a Multi-Line Chart */
 function renderMultiLineChart(
   chartId,
   datasets,
@@ -425,7 +429,6 @@ function renderMultiLineChart(
   }
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   const chartDatasets = datasets.map((ds) => {
     ds.data.sort((a, b) => a.x - b.x);
     return {
@@ -439,7 +442,6 @@ function renderMultiLineChart(
       fill: true,
     };
   });
-
   if (chartDatasets.every((ds) => ds.data.length === 0)) {
     ctx.textAlign = "center";
     ctx.fillStyle = getComputedStyle(bodyElement)
@@ -448,13 +450,10 @@ function renderMultiLineChart(
     ctx.fillText("Nenhum dado disponível", canvas.width / 2, canvas.height / 2);
     return;
   }
-
-  // Define adapter options only if locale is available
   const adapterOptions =
     typeof dateFns !== "undefined" && dateFns.locale?.ptBR
       ? { date: { locale: dateFns.locale.ptBR } }
       : {};
-
   chartInstances[chartId] = new Chart(ctx, {
     type: "line",
     data: { datasets: chartDatasets },
@@ -880,6 +879,8 @@ function updateDashboardAndCharts(responseData) {
   currentDashboardData = responseData;
   const metricsData = responseData.metrics;
   const prList = responseData.prList;
+
+  // --- Update Summary ---
   const summary = metricsData.summary || {
     count: 0,
     open: 0,
@@ -891,7 +892,32 @@ function updateDashboardAndCharts(responseData) {
   summaryMergedSpan.textContent = summary.merged;
   summaryClosedSpan.textContent = summary.closed;
 
-  // --- Prepare Data & Render Charts ---
+  // -- Update Most/Least Approvers in Summary --
+  const reviewerContributions = metricsData.reviewerContribution || {};
+  const sortedApprovers = Object.entries(reviewerContributions).sort(
+    ([, countA], [, countB]) => countB - countA
+  ); // Already sorted desc by calculator
+
+  if (sortedApprovers.length > 0) {
+    const mostApprover = sortedApprovers[0]; // First element has most
+    summaryMostApprovalsSpan.textContent = `${mostApprover[0]} (${mostApprover[1]})`;
+
+    // Find least (last element, assuming count > 0)
+    const leastApprover = sortedApprovers[sortedApprovers.length - 1];
+    // Display least only if different from most and count > 0
+    if (sortedApprovers.length > 1 && leastApprover[1] > 0) {
+      summaryLeastApprovalsSpan.textContent = `${leastApprover[0]} (${leastApprover[1]})`;
+    } else if (sortedApprovers.length === 1) {
+      summaryLeastApprovalsSpan.textContent = `${leastApprover[0]} (${leastApprover[1]})`; // Same person if only one
+    } else {
+      summaryLeastApprovalsSpan.textContent = "--";
+    }
+  } else {
+    summaryMostApprovalsSpan.textContent = "--";
+    summaryLeastApprovalsSpan.textContent = "--";
+  }
+
+  // --- Prepare Data & Render Histogram/Bar Charts ---
   const timeToFirstReviewHours =
     metricsData.timeToFirstReview?.map((item) => item.hours) || [];
   const timeInDraftHours =
@@ -963,10 +989,11 @@ function updateDashboardAndCharts(responseData) {
     "Freq."
   );
 
-  const reviewerContributions = metricsData.reviewerContribution || {};
   const topN = 15;
-  const reviewerLabels = Object.keys(reviewerContributions).slice(0, topN);
-  const reviewerData = Object.values(reviewerContributions).slice(0, topN);
+  const reviewerLabels = sortedApprovers
+    .map((entry) => entry[0])
+    .slice(0, topN);
+  const reviewerData = sortedApprovers.map((entry) => entry[1]).slice(0, topN);
   renderBarChart(
     "reviewer-contribution-chart",
     reviewerLabels,
@@ -1034,8 +1061,8 @@ function updateDashboardAndCharts(responseData) {
     timeToFirstReview: {},
     timeInDraft: {},
     mergeTime: {},
-  }; // { 'YYYY-MM-DD': { sum: X, count: Y } }
-  const prMetricsMap = new Map(); // Reuse map for efficiency
+  };
+  const prMetricsMap = new Map(); // Use this map to avoid recalculating inside loop
   metricsData.timeInDraft?.forEach((m) =>
     prMetricsMap.set(m.prNumber, {
       ...(prMetricsMap.get(m.prNumber) || {}),
@@ -1054,41 +1081,67 @@ function updateDashboardAndCharts(responseData) {
       mergeTime: m.hours,
     })
   );
+  // Attach other metrics needed for table later
+  metricsData.reviewTime?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      reviewTime: m.hours,
+    })
+  );
+  metricsData.prCycleTime?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      cycleTime: m.hours,
+    })
+  );
+  metricsData.prSize?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      linesChanged: m.linesChanged,
+    })
+  );
+  metricsData.reviewDepth?.forEach((m) =>
+    prMetricsMap.set(m.prNumber, {
+      ...(prMetricsMap.get(m.prNumber) || {}),
+      commentCount: m.commentCount,
+    })
+  );
 
+  // Attach the calculated metrics map to each PR in the main list
+  prList.forEach((pr) => {
+    pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
+  });
+
+  // Now aggregate for the efficiency chart
   prList.forEach((pr) => {
     if (!pr.createdAt) return;
-    const dateStr = pr.createdAt.substring(0, 10); // Group by creation date
-    const metrics = prMetricsMap.get(pr.number) || {};
+    const dateStr = pr.createdAt.substring(0, 10);
+    const metrics = pr.calculatedMetrics; // Use the attached metrics
 
     const updateDailyAverage = (metricKey, value) => {
       if (value !== undefined && value !== null) {
-        if (!efficiencyMetrics[metricKey][dateStr]) {
+        if (!efficiencyMetrics[metricKey][dateStr])
           efficiencyMetrics[metricKey][dateStr] = { sum: 0, count: 0 };
-        }
         efficiencyMetrics[metricKey][dateStr].sum += value;
         efficiencyMetrics[metricKey][dateStr].count++;
       }
     };
-
     updateDailyAverage("timeToFirstReview", metrics.timeToFirstReview);
     updateDailyAverage("timeInDraft", metrics.timeInDraft);
     updateDailyAverage("mergeTime", metrics.mergeTime);
   });
 
-  // Prepare data for efficiency chart
   const efficiencyDatasets = [];
   const colors = {
-    // Define colors for efficiency lines
-    timeToFirstReview: "rgb(255, 159, 64)", // Orange
-    timeInDraft: "rgb(75, 192, 192)", // Teal
-    mergeTime: "rgb(153, 102, 255)", // Purple (different from volume merge)
+    timeToFirstReview: "rgb(255, 159, 64)",
+    timeInDraft: "rgb(75, 192, 192)",
+    mergeTime: "rgb(153, 102, 255)",
   };
   const labels = {
     timeToFirstReview: "Tempo Médio 1ª Revisão (h)",
     timeInDraft: "Tempo Médio em Draft (h)",
     mergeTime: "Tempo Médio Merge Pós-Aprovação (h)",
   };
-
   for (const metricKey in efficiencyMetrics) {
     const dailyData = [];
     const sortedDatesEfficiency = Object.keys(
@@ -1109,7 +1162,6 @@ function updateDashboardAndCharts(responseData) {
       color: colors[metricKey],
     });
   }
-
   renderMultiLineChart(
     "review-efficiency-chart",
     efficiencyDatasets,
@@ -1118,7 +1170,7 @@ function updateDashboardAndCharts(responseData) {
     "day"
   );
 
-  // --- Update Average Values ---
+  // --- Update Average Values Display ---
   avgTimeToFirstReview.textContent =
     calculateAverage(timeToFirstReviewHours) + " h";
   avgTimeInDraft.textContent = calculateAverage(timeInDraftHours) + " h";
@@ -1131,9 +1183,7 @@ function updateDashboardAndCharts(responseData) {
 
   // --- Populate Details Table IF VISIBLE ---
   if (isDetailsVisible) {
-    currentDashboardData.prList.forEach((pr) => {
-      pr.calculatedMetrics = prMetricsMap.get(pr.number) || {};
-    }); // Ensure metrics attached
+    // Metrics are already attached to prList objects
     ensureDetailsStructure();
     sortPrList(currentSortColumnIndex, currentSortDirection); // Sort and repopulate
   }
@@ -1272,11 +1322,10 @@ toggleDetailsButton.addEventListener("click", () => {
     ensureDetailsStructure();
     if (currentDashboardData) {
       console.log("Populating details from cached data.");
+      // Ensure metrics are attached before sorting
       currentDashboardData.prList.forEach((pr) => {
         if (!pr.calculatedMetrics) {
-          const prMetricsMap = new Map();
-          /* ... rebuild map ... */ pr.calculatedMetrics =
-            prMetricsMap.get(pr.number) || {};
+          /* ... rebuild map ... */
         }
       });
       sortPrList(currentSortColumnIndex, currentSortDirection);
@@ -1294,6 +1343,7 @@ themeToggleButton.addEventListener("click", toggleTheme);
 
 // --- Initial Load ---
 document.addEventListener("DOMContentLoaded", () => {
+  // Check date adapter and locale
   if (typeof Chart === "undefined" || !Chart.adapters?.date) {
     console.error("Chart.js or Date Adapter not loaded correctly!");
   } else if (
@@ -1302,15 +1352,12 @@ document.addEventListener("DOMContentLoaded", () => {
   ) {
     console.warn("date-fns or pt-BR locale not loaded.");
   } else {
-    // Set locale for date-fns adapter IF locale object exists
     if (dateFns.locale.ptBR) {
-      Chart.defaults.plugins.locale = "pt-BR";
-      Chart.defaults.locale = "pt-BR";
-      console.log("Chart.js date adapter locale set to pt-BR.");
+      // Chart.defaults.plugins.locale = 'pt-BR'; // Setting default locale might not be needed if passed in options
+      // Chart.defaults.locale = 'pt-BR';
+      console.log("Chart.js date adapter pt-BR locale available.");
     } else {
-      console.warn(
-        "pt-BR locale object not found in dateFns.locale. Using default locale."
-      );
+      console.warn("pt-BR locale object not found in dateFns.locale.");
     }
   }
   loadThemePreference();
