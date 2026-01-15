@@ -1,75 +1,75 @@
 # GitHub PR Metrics Dashboard
 
-**Propósito:** Visualizar métricas chave de Pull Requests (PRs) de um repositório específico no GitHub Enterprise para análise de performance e fluxo de desenvolvimento.
+**Purpose:** Visualize key Pull Request (PR) metrics from a specific repository on GitHub Enterprise for performance and development flow analysis.
 
-## Visão Geral
+## Overview
 
-Este dashboard web permite buscar, filtrar e analisar dados de PRs, apresentando métricas agregadas em gráficos e detalhes individuais em uma tabela interativa. Ele se conecta à API GraphQL do GitHub Enterprise e possui um backend Node.js simples e um frontend em HTML/CSS/JavaScript puro.
+This web dashboard allows you to fetch, filter, and analyze PR data, presenting aggregated metrics in charts and individual details in an interactive table. It connects to the GitHub Enterprise GraphQL API and features a simple Node.js backend and a frontend built with pure HTML/CSS/JavaScript.
 
-## Funcionalidades Principais
+## Main Features
 
-- **Busca de Dados:** Conecta-se ao GitHub Enterprise via API GraphQL.
-- **Cache:** Utiliza cache em memória no backend para otimizar chamadas repetidas à API.
-- **Filtragem:** Permite filtrar PRs por autor, aprovador, branch destino, status e intervalo de datas. Também permite excluir PRs por autor ou padrão de branch.
-- **Métricas Calculadas:**
-  - Tempo para Primeira Revisão (Time to First Review)
-  - Tempo em Draft (Time in Draft)
-  - Contribuição do Revisor (Reviewer Contribution / Approval Count)
-  - Tempo de Ciclo do PR (PR Cycle Time / Lead Time)
-  - Tempo de Revisão (Review Time)
-  - Tempo de Merge (Merge Time / Time to Merge)
-  - Tamanho do PR (PR Size - linhas alteradas)
-  - Número Total de Comentários por PR (Review Depth)
-- **Visualização:**
-  - Gráficos agregados (histogramas/barras) para as métricas.
-  - Tabela detalhada por PR (mostrada/ocultada dinamicamente).
-  - Controle de visibilidade de colunas na tabela de detalhes (salvo localmente).
-  - Alternância entre tema claro e escuro (salvo localmente).
-- **Filtros Padrão:** Carrega inicialmente com filtros pré-definidos (Status: Merged, Excluir Autor: dependabot, Branch Destino: main, Período: últimos 30 dias).
+- **Data Fetching:** Connects to GitHub Enterprise via the GraphQL API.
+- **Caching:** Uses in-memory cache on the backend to optimize repeated API calls.
+- **Filtering:** Allows filtering PRs by author, approver, target branch, status, and date range. Also supports excluding PRs by author or branch pattern.
+- **Calculated Metrics:**
+  - Time to First Review
+  - Time in Draft
+  - Reviewer Contribution / Approval Count
+  - PR Cycle Time / Lead Time
+  - Review Time
+  - Merge Time / Time to Merge
+  - PR Size (lines changed)
+  - Total Number of Comments per PR (Review Depth)
+- **Visualization:**
+  - Aggregated charts (histograms/bar charts) for metrics.
+  - Detailed table per PR (shown/hidden dynamically).
+  - Column visibility control in the details table (saved locally).
+  - Light/dark theme toggle (saved locally).
+- **Default Filters:** Initially loads with predefined filters (Status: Merged, Exclude Author: dependabot, Target Branch: main, Period: last 30 days).
 
-## Tecnologias Utilizadas
+## Technologies Used
 
 - **Backend:** Node.js (v22+), `dotenv`
 - **Frontend:** HTML5, CSS3, JavaScript (ES Modules), Chart.js, date-fns
 - **API:** GitHub Enterprise GraphQL API
 
-## Executando o Projeto
+## Running the Project
 
-1.  **Pré-requisitos:**
+1.  **Prerequisites:**
 
-    - Node.js (v22 ou superior)
+    - Node.js (v22 or higher)
     - npm
-    - Token de Acesso Pessoal (PAT) do GitHub Enterprise com escopo `repo`.
+    - GitHub Enterprise Personal Access Token (PAT) with `repo` scope.
 
-2.  **Configuração:**
+2.  **Setup:**
 
-    - Navegue até a pasta `backend`: `cd backend`
-    - Instale as dependências: `npm install`
-    - Crie um arquivo `.env` na pasta `backend` (pode copiar do `.env.example` se houver) e preencha as variáveis:
-      - `GITHUB_TOKEN`: Seu PAT do GitHub.
-      - `GITHUB_REPO_OWNER`: Dono do repositório (usuário/organização).
-      - `GITHUB_REPO_NAME`: Nome do repositório.
-      - `GHE_HOSTNAME`: Hostname da sua instância GHE (ex: `github.suaempresa.com`).
-      - `PORT` (Opcional): Porta para o servidor (padrão: 3000).
-    - **Importante:** Adicione `.env` ao seu arquivo `.gitignore`.
+    - Navigate to the `backend` folder: `cd backend`
+    - Install dependencies: `npm install`
+    - Create a `.env` file in the `backend` folder (you can copy from `.env.example` if available) and fill in the variables:
+      - `GITHUB_TOKEN`: Your GitHub PAT.
+      - `GITHUB_REPO_OWNER`: Repository owner (user/organization).
+      - `GITHUB_REPO_NAME`: Repository name.
+      - `GHE_HOSTNAME`: Your GHE instance hostname (e.g., `github.yourcompany.com`).
+      - `PORT` (Optional): Server port (default: 3000).
+    - **Important:** Add `.env` to your `.gitignore` file.
 
-3.  **Inicialização:**
-    - Ainda na pasta `backend`, execute: `node server.js`
-    - Acesse `http://localhost:3000` (ou a porta configurada) no seu navegador.
+3.  **Start:**
+    - Still in the `backend` folder, run: `node server.js`
+    - Access `http://localhost:3000` (or the configured port) in your browser.
 
-## Entendendo as Métricas
+## Understanding the Metrics
 
-- **Tempo para Primeira Revisão:** Tempo desde que o PR ficou pronto para revisão até a primeira ação de revisão (aprovação, pedido de alteração, comentário de revisão).
-- **Tempo em Draft:** Tempo que um PR passou no estado "Draft" antes de ser marcado como "Ready for Review".
-- **Contribuição do Revisor:** Contagem de quantos PRs cada pessoa aprovou.
-- **Tempo de Ciclo do PR (Lead Time):** Tempo total desde a criação do PR até o merge na branch principal.
-- **Tempo de Revisão:** Tempo desde a primeira revisão até a aprovação final ou merge.
-- **Tempo de Merge:** Tempo desde a aprovação final até o PR ser efetivamente mergeado.
-- **Tamanho do PR:** Soma das linhas adicionadas e excluídas.
-- **Número Total de Comentários:** Soma dos comentários gerais no PR e dos comentários feitos em revisões específicas.
+- **Time to First Review:** Time from when the PR is ready for review until the first review action (approval, change request, review comment).
+- **Time in Draft:** Time a PR spent in "Draft" state before being marked as "Ready for Review".
+- **Reviewer Contribution:** Count of how many PRs each person approved.
+- **PR Cycle Time (Lead Time):** Total time from PR creation to merge into the main branch.
+- **Review Time:** Time from the first review to final approval or merge.
+- **Merge Time:** Time from final approval to when the PR is actually merged.
+- **PR Size:** Sum of lines added and deleted.
+- **Total Number of Comments:** Sum of general PR comments and comments made in specific reviews.
 
-## Limitações e Observações
+## Limitations and Notes
 
-- **Cache:** O cache do backend é em memória e reinicia com o servidor.
-- **Paginação da API:** A busca de revisões e comentários dentro da consulta GraphQL principal é limitada (ex: `first: 50`). PRs com um número muito grande de revisões podem ter a contagem de comentários ou a identificação de aprovadores incompleta.
-- **Performance:** Para repositórios com dezenas de milhares de PRs, a busca inicial e o processamento podem levar mais tempo.
+- **Cache:** Backend cache is in-memory and resets with the server.
+- **API Pagination:** Fetching reviews and comments within the main GraphQL query is limited (e.g., `first: 50`). PRs with a very large number of reviews may have incomplete comment counts or approver identification.
+- **Performance:** For repositories with tens of thousands of PRs, initial fetching and processing may take longer.
