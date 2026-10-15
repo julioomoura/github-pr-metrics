@@ -10,7 +10,7 @@ const GHE_HOSTNAME = process.env.GHE_HOSTNAME; // e.g., github.yourcompany.com
 const GITHUB_API_URL = `https://${GHE_HOSTNAME}/api/graphql`;
 
 // Constants
-const PR_PAGE_SIZE = 50; // Number of PRs to fetch per request
+const PR_PAGE_SIZE = 100; // Number of PRs to fetch per request (GitHub GraphQL max)
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes for GitHub data cache
 
 // Basic validation
