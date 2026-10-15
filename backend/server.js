@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config"; // Ensure env vars are loaded
 
-import { getAllPullRequests } from "./githubClient.js";
+import { fetchRepos } from "./githubClient.js";
 import { calculateMetrics } from "./metricsCalculator.js";
 
 // --- Configuration ---
@@ -14,6 +14,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FRONTEND_DIR = path.resolve(__dirname, "..", "frontend");
 const CACHE_REFRESH_INTERVAL = 5 * 60 * 1000;
+const MAX_REPOS = 10;
+
+// Default repo from environment variables
+const DEFAULT_REPO = {
+  owner: process.env.GITHUB_REPO_OWNER,
+  name: process.env.GITHUB_REPO_NAME,
+};
+const DEFAULT_REPOS =
+  DEFAULT_REPO.owner && DEFAULT_REPO.name ? [DEFAULT_REPO] : [];
 
 // --- State ---
 let allPrDataCache = null;
@@ -81,51 +90,86 @@ async function serveStaticFile(requestedPath, res) {
   }
 }
 
-async function getPrData(forceRefresh = false) {
-  /* ... (getPrData function as before) ... */
+function buildRepoCacheKey(repos) {
+  return repos
+    .map((r) => `${r.owner}/${r.name}`)
+    .sort()
+    .join(",");
+}
+
+function parseReposParam(reposParam) {
+  if (!reposParam) return [...DEFAULT_REPOS];
+  try {
+    const parsed = JSON.parse(reposParam);
+    if (!Array.isArray(parsed)) return [...DEFAULT_REPOS];
+    const validRepos = parsed
+      .filter((r) => r && typeof r.owner === "string" && typeof r.name === "string")
+      .map((r) => ({ owner: r.owner.trim(), name: r.name.trim() }))
+      .filter((r) => r.owner && r.name);
+    return validRepos.length > 0 ? validRepos.slice(0, MAX_REPOS) : [...DEFAULT_REPOS];
+  } catch (e) {
+    console.warn("[Server] Failed to parse repos param:", reposParam, e);
+    return [...DEFAULT_REPOS];
+  }
+}
+
+async function getPrData(repos = DEFAULT_REPOS, forceRefresh = false) {
   const now = Date.now();
+  const repoKey = buildRepoCacheKey(repos);
+
   if (
     !forceRefresh &&
     allPrDataCache &&
+    allPrDataCache.repoKey === repoKey &&
     now - lastFetchTime < CACHE_REFRESH_INTERVAL
   ) {
     console.log("[Server] Using locally cached PR data.");
     return allPrDataCache;
   }
+
   try {
     console.log("[Server] Fetching PR data from GitHub client...");
-    const fetchedData = await getAllPullRequests(forceRefresh, [
+    const fetchedData = await fetchRepos(repos, forceRefresh, [
       "OPEN",
       "MERGED",
       "CLOSED",
     ]);
-    if (Array.isArray(fetchedData)) {
-      allPrDataCache = fetchedData;
+
+    const allPrs = (fetchedData.results || []).flatMap((r) => r.prs);
+    const errors = fetchedData.errors || [];
+
+    if (allPrs.length > 0 || errors.length === 0) {
+      allPrDataCache = {
+        repoKey,
+        prList: allPrs,
+        perRepo: fetchedData.results || [],
+        errors,
+      };
       lastFetchTime = Date.now();
       console.log(
-        `[Server] Successfully fetched ${allPrDataCache.length} PRs.`
+        `[Server] Successfully fetched ${allPrs.length} PRs across ${fetchedData.results.length} repo(s). Errors: ${errors.length}`
       );
       return allPrDataCache;
     } else {
       console.error(
-        "[Server] Invalid data received from getAllPullRequests:",
-        fetchedData
+        "[Server] All repository fetches failed:",
+        errors
       );
-      if (allPrDataCache) {
+      if (allPrDataCache && allPrDataCache.repoKey === repoKey) {
         console.warn(
-          "[Server] Returning stale PR data due to invalid fetch response."
+          "[Server] Returning stale PR data due to fetch error."
         );
         return allPrDataCache;
       }
-      return null;
+      return { repoKey, prList: [], perRepo: [], errors };
     }
   } catch (error) {
     console.error("[Server] Error fetching PR data:", error);
-    if (allPrDataCache) {
+    if (allPrDataCache && allPrDataCache.repoKey === buildRepoCacheKey(repos)) {
       console.warn("[Server] Returning stale PR data due to fetch error.");
       return allPrDataCache;
     } else {
-      return null;
+      return { repoKey: buildRepoCacheKey(repos), prList: [], perRepo: [], errors: [{ owner: "-", name: "-", message: error.message }] };
     }
   }
 }
@@ -205,27 +249,46 @@ const server = http.createServer(async (req, res) => {
       const forceRefresh = url.searchParams.get("forceRefresh") === "true";
       const includePrList = url.searchParams.get("includePrList") === "true"; // Check if details are requested
 
-      const allPrData = await getPrData(forceRefresh);
+      const repos = parseReposParam(url.searchParams.get("repos"));
+      if (!repos || repos.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Nenhum repositório informado." }));
+        return;
+      }
 
-      if (allPrData === null) {
+      const allPrData = await getPrData(repos, forceRefresh);
+
+      if (!allPrData || (allPrData.prList.length === 0 && allPrData.errors.length > 0)) {
         console.error(
-          "[Server] API /api/metrics: Failed to retrieve PR data from source."
+          "[Server] API /api/metrics: Failed to retrieve PR data from source.",
+          allPrData?.errors
         );
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
             error:
               "Falha crítica ao buscar dados do GitHub. Verifique os logs do servidor.",
+            errors: allPrData?.errors || [],
           })
         );
         return;
       }
 
-      const filteredData = filterPrData(allPrData, url.searchParams);
+      const filteredData = filterPrData(allPrData.prList, url.searchParams);
       const metrics = calculateMetrics(filteredData);
+
+      // Per-repo metrics
+      const perRepoMetrics = {};
+      (allPrData.perRepo || []).forEach(({ owner, name, prs }) => {
+        const repoFullName = `${owner}/${name}`;
+        const repoFiltered = filterPrData(prs, url.searchParams);
+        perRepoMetrics[repoFullName] = calculateMetrics(repoFiltered);
+      });
 
       const responsePayload = {
         metrics: metrics,
+        perRepo: perRepoMetrics,
+        errors: allPrData.errors || [],
         ...(includePrList && { prList: filteredData }),
       };
 
@@ -234,20 +297,30 @@ const server = http.createServer(async (req, res) => {
     }
     // API Route for unique filter values
     else if (pathname === "/api/filters" && method === "GET") {
-      const prData = await getPrData(false);
-      if (prData === null) {
+      const repos = parseReposParam(url.searchParams.get("repos"));
+      if (!repos || repos.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Nenhum repositório informado." }));
+        return;
+      }
+
+      const prData = await getPrData(repos, false);
+      if (!prData || (prData.prList.length === 0 && prData.errors.length > 0)) {
         console.error(
-          "[Server] API /api/filters: Failed to retrieve PR data from source."
+          "[Server] API /api/filters: Failed to retrieve PR data from source.",
+          prData?.errors
         );
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
             error: "Falha crítica ao buscar dados do GitHub para filtros.",
+            errors: prData?.errors || [],
           })
         );
         return;
       }
-      if (!Array.isArray(prData)) {
+      const prList = prData.prList || [];
+      if (!Array.isArray(prList)) {
         console.error(
           "[Server] API /api/filters: Received invalid PR data structure:",
           prData
@@ -261,14 +334,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const authors = [
-        ...new Set(prData.map((pr) => pr.author?.login).filter(Boolean)),
+        ...new Set(prList.map((pr) => pr.author?.login).filter(Boolean)),
       ].sort();
       const branches = [
-        ...new Set(prData.map((pr) => pr.baseRefName).filter(Boolean)),
+        ...new Set(prList.map((pr) => pr.baseRefName).filter(Boolean)),
       ].sort();
       const approvers = [
         ...new Set(
-          prData
+          prList
             .flatMap(
               (pr) =>
                 pr.reviews?.nodes
@@ -279,7 +352,17 @@ const server = http.createServer(async (req, res) => {
         ),
       ].sort();
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ authors, branches, approvers }));
+      res.end(JSON.stringify({ authors, branches, approvers, errors: prData.errors || [] }));
+    }
+    // API Route for default configuration
+    else if (pathname === "/api/config" && method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          defaultRepo: DEFAULT_REPO,
+          maxRepos: MAX_REPOS,
+        })
+      );
     }
     // Serve Frontend Files
     else if (method === "GET") {
@@ -334,7 +417,7 @@ server.listen(PORT, () => {
         `[Server] ERROR: Frontend directory NOT FOUND at ${FRONTEND_DIR}.`
       )
     );
-  getPrData().catch((err) =>
+  getPrData(DEFAULT_REPOS).catch((err) =>
     console.error("[Server] Initial data fetch failed:", err)
   );
 });
