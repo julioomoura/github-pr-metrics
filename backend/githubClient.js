@@ -47,7 +47,9 @@ const PULL_REQUEST_QUERY = `
           isDraft
           author {
             login
-            name # <-- Adicionado campo name
+            ... on User {
+              name # <-- Adicionado campo name
+            }
           }
           baseRefName # Target branch
           headRefName # Source branch
@@ -56,7 +58,9 @@ const PULL_REQUEST_QUERY = `
              nodes {
                author {
                  login
-                 name # <-- Adicionado campo name
+                 ... on User {
+                   name # <-- Adicionado campo name
+                 }
                }
                createdAt
                state # APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
@@ -96,14 +100,16 @@ const PULL_REQUEST_QUERY = `
               ... on ConvertToDraftEvent {
                 createdAt
               }
-              ... on PullRequestReview {
-                 author {
-                    login
-                    name # <-- Adicionado campo name
-                 }
-                 createdAt
-                 state
-              }
+               ... on PullRequestReview {
+                  author {
+                     login
+                     ... on User {
+                       name # <-- Adicionado campo name
+                     }
+                  }
+                  createdAt
+                  state
+               }
             }
           }
           additions
