@@ -19,6 +19,31 @@
     </header>
 
     <main>
+      <section class="settings-container card">
+        <h2>
+          Configuração de Repositórios
+          <button type="button" id="toggle-settings-btn" class="button-link">Ocultar</button>
+        </h2>
+        <div id="settings-content">
+          <div id="repo-list" class="repo-list"></div>
+          <div class="repo-add-form">
+            <div class="filter-group">
+              <label for="repo-owner-input">Owner/Organização:</label>
+              <input type="text" id="repo-owner-input" placeholder="Ex: myorg" />
+            </div>
+            <div class="filter-group">
+              <label for="repo-name-input">Nome do Repositório:</label>
+              <input type="text" id="repo-name-input" placeholder="Ex: myrepo" />
+            </div>
+            <button type="button" id="add-repo-btn">Adicionar Repositório</button>
+          </div>
+          <p id="repo-limit-message" class="repo-limit-message" style="display: none;"></p>
+          <div class="settings-actions">
+            <button type="button" id="apply-repos-btn" class="button-primary">Aplicar Repositórios</button>
+          </div>
+        </div>
+      </section>
+
       <section class="filters-container card">
         <h2>Filtros</h2>
         <form id="filters-form">
@@ -118,6 +143,11 @@
           <p>Mais Aprovou: <span id="summary-most-approvals">--</span></p>
           <p>Menos Aprovou: <span id="summary-least-approvals">--</span></p>
         </div>
+      </section>
+
+      <section class="per-repo-container card" style="display: none;">
+        <h2>Resumo por Repositório</h2>
+        <div id="per-repo-summary" class="per-repo-grid"></div>
       </section>
 
       <section class="charts-container">

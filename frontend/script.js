@@ -47,6 +47,19 @@ const detailsSectionContainer = document.getElementById(
   "details-section-container"
 );
 
+// Repo Settings Elements
+const settingsContainer = document.querySelector(".settings-container");
+const settingsContent = document.getElementById("settings-content");
+const toggleSettingsButton = document.getElementById("toggle-settings-btn");
+const repoListContainer = document.getElementById("repo-list");
+const repoOwnerInput = document.getElementById("repo-owner-input");
+const repoNameInput = document.getElementById("repo-name-input");
+const addRepoButton = document.getElementById("add-repo-btn");
+const applyReposButton = document.getElementById("apply-repos-btn");
+const repoLimitMessage = document.getElementById("repo-limit-message");
+const perRepoContainer = document.querySelector(".per-repo-container");
+const perRepoSummary = document.getElementById("per-repo-summary");
+
 // Details Table Elements (will be created dynamically)
 let detailsTable = null;
 let detailsTableHead = null;
@@ -59,6 +72,7 @@ let detailsFilterInput = null;
 // --- Constants ---
 const LOCAL_STORAGE_KEY_THEME = "dashboardThemePreference";
 const LOCAL_STORAGE_KEY_COLUMNS = "prDetailsColumnVisibility";
+const LOCAL_STORAGE_KEY_REPOS = "dashboardRepoList";
 const TOGGLEABLE_COLUMNS = [
   {
     index: 2,
@@ -173,6 +187,9 @@ let currentDashboardData = null;
 let currentSortColumnIndex = 4;
 let currentSortDirection = "desc";
 let currentTheme = "light";
+let currentRepos = [];
+let maxRepos = 10;
+let isSettingsVisible = true;
 
 // --- Utility Functions ---
 function destroyChart(chartId) {
@@ -284,6 +301,117 @@ function toggleTheme() {
   if (currentDashboardData) {
     updateDashboardAndCharts(currentDashboardData);
   }
+}
+
+// --- Repo Settings Functions ---
+function loadRepoList() {
+  try {
+    const s = localStorage.getItem(LOCAL_STORAGE_KEY_REPOS);
+    if (s) {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((r) => r && typeof r.owner === "string" && typeof r.name === "string")
+          .map((r) => ({ owner: r.owner.trim(), name: r.name.trim() }))
+          .filter((r) => r.owner && r.name)
+          .slice(0, maxRepos);
+      }
+    }
+  } catch (e) {
+    console.error("Err load repo list:", e);
+  }
+  return [];
+}
+function saveRepoList(repos) {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_REPOS, JSON.stringify(repos.slice(0, maxRepos)));
+  } catch (e) {
+    console.error("Err save repo list:", e);
+  }
+}
+function renderRepoList() {
+  if (!repoListContainer) return;
+  repoListContainer.innerHTML = "";
+  if (currentRepos.length === 0) {
+    repoListContainer.innerHTML = "<p class='repo-limit-message'>Nenhum repositório configurado.</p>";
+    return;
+  }
+  currentRepos.forEach((repo, index) => {
+    const item = document.createElement("div");
+    item.className = "repo-item";
+    item.innerHTML = `<span>${escapeHtml(repo.owner)}/${escapeHtml(repo.name)}</span><button type="button" data-index="${index}" title="Remover">×</button>`;
+    repoListContainer.appendChild(item);
+  });
+  repoListContainer.querySelectorAll("button[data-index]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      if (!isNaN(idx)) {
+        currentRepos.splice(idx, 1);
+        renderRepoList();
+        updateRepoLimitMessage();
+      }
+    });
+  });
+}
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+function updateRepoLimitMessage() {
+  if (!repoLimitMessage) return;
+  if (currentRepos.length >= maxRepos) {
+    repoLimitMessage.textContent = `Limite máximo de ${maxRepos} repositórios atingido.`;
+    repoLimitMessage.style.display = "block";
+  } else {
+    repoLimitMessage.style.display = "none";
+    repoLimitMessage.textContent = "";
+  }
+}
+function addRepoFromInput() {
+  const owner = repoOwnerInput.value.trim();
+  const name = repoNameInput.value.trim();
+  if (!owner || !name) {
+    alert("Preencha owner e nome do repositório.");
+    return;
+  }
+  if (currentRepos.length >= maxRepos) {
+    alert(`Limite máximo de ${maxRepos} repositórios atingido.`);
+    return;
+  }
+  const alreadyExists = currentRepos.some(
+    (r) => r.owner.toLowerCase() === owner.toLowerCase() && r.name.toLowerCase() === name.toLowerCase()
+  );
+  if (alreadyExists) {
+    alert("Repositório já adicionado.");
+    return;
+  }
+  currentRepos.push({ owner, name });
+  repoOwnerInput.value = "";
+  repoNameInput.value = "";
+  renderRepoList();
+  updateRepoLimitMessage();
+}
+function applyRepoSettings() {
+  if (currentRepos.length === 0) {
+    alert("Adicione pelo menos um repositório.");
+    return;
+  }
+  saveRepoList(currentRepos);
+  fetchFilterOptions();
+  fetchDashboardData(true);
+}
+function toggleSettingsVisibility() {
+  isSettingsVisible = !isSettingsVisible;
+  if (settingsContent) {
+    settingsContent.style.display = isSettingsVisible ? "flex" : "none";
+  }
+  if (toggleSettingsButton) {
+    toggleSettingsButton.textContent = isSettingsVisible ? "Ocultar" : "Mostrar";
+  }
+}
+function getReposQueryParam() {
+  return JSON.stringify(currentRepos);
 }
 function updateChartDefaults(theme) {
   const isDark = theme === "dark";
@@ -1189,14 +1317,66 @@ function updateDashboardAndCharts(responseData) {
     sortPrList(currentSortColumnIndex, currentSortDirection);
   }
 
-  // Display calculation errors if any
-  if (metricsData.errors && metricsData.errors.length > 0) {
-    const errorMsg = `Avisos no cálculo: ${metricsData.errors.length} PR(s). Ver console.`;
-    showError(errorMsg);
+  // --- Update Per-Repo Summary ---
+  renderPerRepoSummary(responseData.perRepo, responseData.errors);
+
+  // Display calculation/fetch errors if any
+  const allErrors = [
+    ...(responseData.errors || []),
+    ...(metricsData.errors || []),
+  ];
+  if (allErrors.length > 0) {
+    const repoErrors = responseData.errors || [];
+    const calcErrors = metricsData.errors || [];
+    let errorMsg = "";
+    if (repoErrors.length > 0) {
+      errorMsg += `Falha em ${repoErrors.length} repositório(s): ${repoErrors
+        .map((e) => `${e.owner}/${e.name}`)
+        .join(", ")}. `;
+    }
+    if (calcErrors.length > 0) {
+      errorMsg += `Avisos no cálculo: ${calcErrors.length} PR(s). Ver console.`;
+    }
+    showError(errorMsg.trim());
     if (isDetailsVisible) {
-      showDetailsError(errorMsg);
+      showDetailsError(errorMsg.trim());
     }
   }
+}
+
+function renderPerRepoSummary(perRepoMetrics = {}, fetchErrors = []) {
+  if (!perRepoSummary || !perRepoContainer) return;
+  perRepoSummary.innerHTML = "";
+  const repoKeys = Object.keys(perRepoMetrics);
+  if (repoKeys.length === 0 && fetchErrors.length === 0) {
+    perRepoContainer.style.display = "none";
+    return;
+  }
+  perRepoContainer.style.display = "block";
+
+  repoKeys.forEach((repoKey) => {
+    const metrics = perRepoMetrics[repoKey];
+    const summary = metrics.summary || { count: 0, open: 0, merged: 0, closed: 0 };
+    const card = document.createElement("div");
+    card.className = "per-repo-card";
+    card.innerHTML = `
+      <h3>${escapeHtml(repoKey)}</h3>
+      <p>Total: <strong>${summary.count}</strong></p>
+      <p>Abertos: ${summary.open} | Mergeados: ${summary.merged} | Fechados: ${summary.closed}</p>
+    `;
+    perRepoSummary.appendChild(card);
+  });
+
+  fetchErrors.forEach((err) => {
+    const repoKey = `${err.owner}/${err.name}`;
+    const card = document.createElement("div");
+    card.className = "per-repo-card";
+    card.innerHTML = `
+      <h3>${escapeHtml(repoKey)}</h3>
+      <p class="repo-error">Falha ao carregar: ${escapeHtml(err.message)}</p>
+    `;
+    perRepoSummary.appendChild(card);
+  });
 }
 
 async function fetchDashboardData(forceRefresh = false) {
@@ -1204,6 +1384,7 @@ async function fetchDashboardData(forceRefresh = false) {
   const params = getCurrentFilters();
   if (forceRefresh) params.append("forceRefresh", "true");
   params.append("includePrList", "true");
+  params.append("repos", getReposQueryParam());
   const apiUrl = `/api/metrics?${params.toString()}`;
   console.log("Fetching dashboard data from:", apiUrl);
   try {
@@ -1231,7 +1412,9 @@ async function fetchDashboardData(forceRefresh = false) {
 }
 async function fetchFilterOptions() {
   try {
-    const r = await fetch("/api/filters");
+    const params = new URLSearchParams();
+    params.append("repos", getReposQueryParam());
+    const r = await fetch(`/api/filters?${params.toString()}`);
     if (!r.ok) throw new Error(r.statusText);
     const d = await r.json();
     populateDatalist(authorDatalist, d.authors || []);
@@ -1315,6 +1498,24 @@ forceRefreshButton.addEventListener("click", () => {
   fetchDashboardData(true);
 });
 
+if (addRepoButton) {
+  addRepoButton.addEventListener("click", addRepoFromInput);
+}
+if (applyReposButton) {
+  applyReposButton.addEventListener("click", applyRepoSettings);
+}
+if (toggleSettingsButton) {
+  toggleSettingsButton.addEventListener("click", toggleSettingsVisibility);
+}
+if (repoNameInput) {
+  repoNameInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addRepoFromInput();
+    }
+  });
+}
+
 toggleDetailsButton.addEventListener("click", () => {
   isDetailsVisible = !isDetailsVisible;
   if (isDetailsVisible) {
@@ -1352,7 +1553,7 @@ toggleDetailsButton.addEventListener("click", () => {
 themeToggleButton.addEventListener("click", toggleTheme);
 
 // --- Initial Load ---
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   if (typeof Chart === "undefined" || !Chart.adapters?.date) {
     console.error("Chart.js or Date Adapter not loaded correctly!");
   } else if (
@@ -1372,6 +1573,34 @@ document.addEventListener("DOMContentLoaded", () => {
   loadThemePreference();
   setDefaultDateRange();
   setDefaultFilters();
+
+  // Load config (default repo + max repos) then initialize repo list
+  try {
+    const configRes = await fetch("/api/config");
+    if (configRes.ok) {
+      const config = await configRes.json();
+      if (typeof config.maxRepos === "number") {
+        maxRepos = config.maxRepos;
+      }
+      const savedRepos = loadRepoList();
+      if (savedRepos.length > 0) {
+        currentRepos = savedRepos;
+      } else if (config.defaultRepo && config.defaultRepo.owner && config.defaultRepo.name) {
+        currentRepos = [config.defaultRepo];
+        saveRepoList(currentRepos);
+      }
+    }
+  } catch (e) {
+    console.error("Err fetch config:", e);
+    currentRepos = loadRepoList();
+  }
+
+  renderRepoList();
+  updateRepoLimitMessage();
+  if (currentRepos.length === 0) {
+    showError("Nenhum repositório configurado. Adicione um repositório nas configurações.");
+    return;
+  }
   fetchFilterOptions();
   fetchDashboardData(false);
 });
