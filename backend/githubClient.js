@@ -12,6 +12,7 @@ const GITHUB_API_URL = `https://${GHE_HOSTNAME}/api/graphql`;
 // Constants
 const PR_PAGE_SIZE = 100; // Number of PRs to fetch per request (GitHub GraphQL max)
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes for GitHub data cache
+const MAX_CONCURRENT_REPO_FETCHES = 3; // Limit parallel repo fetches to protect rate limits
 
 // Basic validation
 if (!GITHUB_TOKEN || !GITHUB_REPO_OWNER || !GITHUB_REPO_NAME || !GHE_HOSTNAME) {
@@ -188,25 +189,25 @@ async function fetchGraphQL(query, variables) {
  * @returns {Promise<Array<object> | null>} A list of all pull request nodes, or null on critical failure.
  */
 async function getAllPullRequests(
+  owner,
+  name,
   forceRefresh = false,
   states = ["OPEN", "MERGED", "CLOSED"]
 ) {
-  const cacheKey = `prs_${GITHUB_REPO_OWNER}_${GITHUB_REPO_NAME}_${states.join(
-    "_"
-  )}_v3`; // Changed cache key due to query change
+  const cacheKey = `prs_${owner}_${name}_${states.join("_")}_v4`; // Changed cache key due to query change
 
   if (!forceRefresh) {
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
-      console.log("[GitHubClient] Returning cached PR data.");
+      console.log(`[GitHubClient] Returning cached PR data for ${owner}/${name}.`);
       return cachedData;
     }
   } else {
-    console.log("[GitHubClient] Force refresh requested, bypassing cache.");
+    console.log(`[GitHubClient] Force refresh requested for ${owner}/${name}, bypassing cache.`);
   }
 
   console.log(
-    `[GitHubClient] Fetching all PRs for ${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME} with states: ${states.join(
+    `[GitHubClient] Fetching all PRs for ${owner}/${name} with states: ${states.join(
       ", "
     )}...`
   );
@@ -223,8 +224,8 @@ async function getAllPullRequests(
       })`
     );
     const variables = {
-      owner: GITHUB_REPO_OWNER,
-      name: GITHUB_REPO_NAME,
+      owner,
+      name,
       first: PR_PAGE_SIZE,
       after: afterCursor,
       states: states,
@@ -285,4 +286,79 @@ async function getAllPullRequests(
   return allPRs;
 }
 
-export { getAllPullRequests };
+/**
+ * Fetches pull requests for multiple repositories in parallel with a concurrency limit.
+ * Each PR is tagged with its repository information.
+ * @param {Array<{owner: string, name: string}>} repos - List of repositories to fetch.
+ * @param {boolean} forceRefresh - If true, bypasses the cache.
+ * @param {string[]} states - Filter PRs by state.
+ * @returns {Promise<{results: Array<{owner: string, name: string, prs: Array<object>}>, errors: Array<{owner: string, name: string, message: string}>}>}
+ */
+async function fetchRepos(
+  repos,
+  forceRefresh = false,
+  states = ["OPEN", "MERGED", "CLOSED"]
+) {
+  if (!Array.isArray(repos) || repos.length === 0) {
+    return { results: [], errors: [] };
+  }
+
+  const results = [];
+  const errors = [];
+
+  // Process repos in batches to limit concurrency
+  for (let i = 0; i < repos.length; i += MAX_CONCURRENT_REPO_FETCHES) {
+    const batch = repos.slice(i, i + MAX_CONCURRENT_REPO_FETCHES);
+    const batchPromises = batch.map(async ({ owner, name }) => {
+      try {
+        const prs = await getAllPullRequests(owner, name, forceRefresh, states);
+        if (prs === null) {
+          throw new Error(`Failed to fetch PRs for ${owner}/${name}`);
+        }
+        // Tag each PR with repository info
+        const taggedPrs = prs.map((pr) => ({
+          ...pr,
+          repository: {
+            owner,
+            name,
+            fullName: `${owner}/${name}`,
+          },
+        }));
+        return { owner, name, prs: taggedPrs };
+      } catch (error) {
+        console.error(`[GitHubClient] Error fetching ${owner}/${name}:`, error);
+        return {
+          error: true,
+          owner,
+          name,
+          message: error.message || `Unknown error fetching ${owner}/${name}`,
+        };
+      }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    batchResults.forEach((result) => {
+      if (result.error) {
+        errors.push({
+          owner: result.owner,
+          name: result.name,
+          message: result.message,
+        });
+      } else {
+        results.push({
+          owner: result.owner,
+          name: result.name,
+          prs: result.prs,
+        });
+      }
+    });
+  }
+
+  console.log(
+    `[GitHubClient] Finished fetching ${repos.length} repo(s). Success: ${results.length}, Errors: ${errors.length}`
+  );
+
+  return { results, errors };
+}
+
+export { getAllPullRequests, fetchRepos };
